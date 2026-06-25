@@ -102,3 +102,36 @@ export interface DeploymentRecord {
   accountId: string;
   containers: DeploymentResult[];
 }
+
+// ─── Diff ─────────────────────────────────────────────────────────────────────
+
+export type EntityKind = 'tag' | 'variable' | 'trigger';
+export type EntityStatus = 'new' | 'modified' | 'unchanged';
+
+export interface DiffEntity {
+  key: string; // unique: `${kind}::${name}`
+  kind: EntityKind;
+  name: string;
+  status: EntityStatus;
+  selected: boolean;
+  existingId?: string; // GTM entity ID if already exists
+  proposed: GTMTag | GTMVariable | GTMTrigger;
+  current?: GTMTag | GTMVariable | GTMTrigger; // current state in GTM (if exists)
+}
+
+export interface ContainerDiff {
+  containerId: string;
+  containerName: string;
+  containerPublicId: string;
+  defaultWorkspaceId: string;
+  entities: DiffEntity[];
+  status: 'idle' | 'loading' | 'ready' | 'error';
+  error?: string;
+}
+
+export interface GlobalDiffSummary {
+  newCount: number;
+  modifiedCount: number;
+  unchangedCount: number;
+  selectedCount: number;
+}

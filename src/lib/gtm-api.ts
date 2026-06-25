@@ -152,6 +152,53 @@ export async function listTriggers(
   );
 }
 
+// ─── Update (PUT) ─────────────────────────────────────────────────────────────
+
+export async function updateTag(
+  token: string,
+  accountId: string,
+  containerId: string,
+  workspaceId: string,
+  tagId: string,
+  tag: GTMTag
+): Promise<unknown> {
+  return request(
+    `/accounts/${accountId}/containers/${containerId}/workspaces/${workspaceId}/tags/${tagId}`,
+    token,
+    { method: 'PUT', body: JSON.stringify(tag) }
+  );
+}
+
+export async function updateVariable(
+  token: string,
+  accountId: string,
+  containerId: string,
+  workspaceId: string,
+  variableId: string,
+  variable: GTMVariable
+): Promise<unknown> {
+  return request(
+    `/accounts/${accountId}/containers/${containerId}/workspaces/${workspaceId}/variables/${variableId}`,
+    token,
+    { method: 'PUT', body: JSON.stringify(variable) }
+  );
+}
+
+export async function updateTrigger(
+  token: string,
+  accountId: string,
+  containerId: string,
+  workspaceId: string,
+  triggerId: string,
+  trigger: GTMTrigger
+): Promise<unknown> {
+  return request(
+    `/accounts/${accountId}/containers/${containerId}/workspaces/${workspaceId}/triggers/${triggerId}`,
+    token,
+    { method: 'PUT', body: JSON.stringify(trigger) }
+  );
+}
+
 // ─── Version + Publish ────────────────────────────────────────────────────────
 
 export async function createVersion(
