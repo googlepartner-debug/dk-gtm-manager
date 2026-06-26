@@ -3,6 +3,7 @@ import type {
   GTMAccount, GTMContainer, DeploymentPackage, DeploymentRecord, DeploymentResult,
   ContainerDiff, DiffEntity, GlobalDiffSummary,
 } from '../types/gtm';
+import { STATIC_ACCOUNTS, STATIC_CONTAINERS } from '../data/gtm-static';
 import {
   listAccounts, listContainers, createWorkspace,
   createTag, updateTag,
@@ -42,8 +43,8 @@ interface GTMStore {
   history: DeploymentRecord[];
 
   // Actions — containers
-  fetchAccounts: (token: string) => Promise<void>;
-  selectAccount: (accountId: string, token: string) => Promise<void>;
+  fetchAccounts: (token?: string) => Promise<void>;
+  selectAccount: (accountId: string, token?: string) => Promise<void>;
   toggleContainer: (containerId: string) => void;
   selectAllContainers: () => void;
   clearContainerSelection: () => void;
@@ -96,6 +97,10 @@ export const useGTMStore = create<GTMStore>((set, get) => ({
 
   fetchAccounts: async (token) => {
     set({ isLoadingAccounts: true, accountError: null });
+    if (!token) {
+      set({ accounts: STATIC_ACCOUNTS, isLoadingAccounts: false });
+      return;
+    }
     try {
       const accounts = await listAccounts(token);
       set({ accounts, isLoadingAccounts: false });
@@ -106,6 +111,11 @@ export const useGTMStore = create<GTMStore>((set, get) => ({
 
   selectAccount: async (accountId, token) => {
     set({ selectedAccountId: accountId, isLoadingContainers: true, containers: [], selectedContainerIds: new Set(), diffs: {} });
+    if (!token) {
+      const containers = STATIC_CONTAINERS[accountId] ?? [];
+      set({ containers, isLoadingContainers: false });
+      return;
+    }
     try {
       const containers = await listContainers(token, accountId);
       set({ containers, isLoadingContainers: false });

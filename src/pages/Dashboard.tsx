@@ -11,17 +11,11 @@ export function Dashboard() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (!accessToken) {
-      navigate('/');
-      return;
-    }
-    fetchAccounts(accessToken);
+    fetchAccounts(accessToken ?? undefined);
   }, [accessToken]);
 
-  if (!accessToken) return null;
-
   return (
-    <div className="flex flex-col h-screen bg-slate-50">
+    <div className="flex flex-col h-screen bg-background">
       <Header />
       <div className="flex flex-1 overflow-hidden">
         <Sidebar />

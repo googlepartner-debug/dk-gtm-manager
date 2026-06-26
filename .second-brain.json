@@ -1,0 +1,4 @@
+{
+  "focus": "DK GTM Manager",
+  "extra_scan": "Outil interne Digital Keys de déploiement batch de tags GTM sur plusieurs containers. Stack : React + Vite + TypeScript + Tailwind v4 + Zustand. Pas de backend — données statiques GTM (gtm-static.ts) en attendant GCP OAuth. Consulter l'état des pages src/pages/ et les composants src/components/diff/ pour noter les features récentes."
+}

@@ -4,6 +4,7 @@ import type { AuthState } from '../lib/auth';
 
 interface AuthStore extends AuthState {
   isLoading: boolean;
+  error: string | null;
   login: () => Promise<void>;
   logout: () => void;
 }
@@ -30,12 +31,19 @@ const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID as string;
 export const useAuthStore = create<AuthStore>((set) => ({
   ...loadAuthState(),
   isLoading: false,
+  error: null,
 
   login: async () => {
-    set({ isLoading: true });
+    set({ isLoading: true, error: null });
+
+    if (!CLIENT_ID) {
+      set({ isLoading: false, error: 'VITE_GOOGLE_CLIENT_ID non configuré — ajoutez-le dans .env.local' });
+      return;
+    }
+
     return new Promise<void>((resolve, reject) => {
       if (!window.google?.accounts?.oauth2) {
-        set({ isLoading: false });
+        set({ isLoading: false, error: 'Google Identity Services non chargé — vérifiez votre connexion.' });
         reject(new Error('Google Identity Services not loaded'));
         return;
       }
@@ -44,7 +52,10 @@ export const useAuthStore = create<AuthStore>((set) => ({
         scope: GTM_SCOPES,
         callback: async (response) => {
           if (response.error) {
-            set({ isLoading: false });
+            const msg = response.error === 'popup_closed_by_user'
+              ? 'Connexion annulée.'
+              : `Erreur Google : ${response.error}`;
+            set({ isLoading: false, error: msg });
             reject(new Error(response.error));
             return;
           }
@@ -58,10 +69,10 @@ export const useAuthStore = create<AuthStore>((set) => ({
               expiresAt: Date.now() + response.expires_in * 1000,
             };
             saveAuthState(state);
-            set({ ...state, isLoading: false });
+            set({ ...state, isLoading: false, error: null });
             resolve();
           } catch (err) {
-            set({ isLoading: false });
+            set({ isLoading: false, error: 'Impossible de récupérer les infos utilisateur.' });
             reject(err);
           }
         },
@@ -72,6 +83,6 @@ export const useAuthStore = create<AuthStore>((set) => ({
 
   logout: () => {
     clearAuthState();
-    set({ accessToken: null, userEmail: null, userName: null, userPicture: null, expiresAt: null });
+    set({ accessToken: null, userEmail: null, userName: null, userPicture: null, expiresAt: null, error: null });
   },
 }));
