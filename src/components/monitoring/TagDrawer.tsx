@@ -278,7 +278,10 @@ function SyncPlanView({
           <div>
             <p className="text-[11px] font-semibold text-muted-fg uppercase tracking-wider mb-2">Containers cibles</p>
             <div className="space-y-2">
-              {diffs.map((diff) => {
+              {[...diffs].sort((a, b) => {
+                const r = (d: SyncContainerDiff) => d.status === 'needs-sync' ? 0 : d.status === 'identical' ? 1 : 2;
+                return r(a) - r(b);
+              }).map((diff) => {
                 const isNeeds = diff.status === 'needs-sync';
                 const isSelected = selected.has(diff.containerId);
                 return (
@@ -406,27 +409,7 @@ function TriggersTab({
           Synchroniser depuis une référence
         </button>
       )}
-      {[...infos].sort((a, b) => {
-        // Compute majority trigger set once (most common across present containers)
-        const presentInfos = infos.filter((i) => i.tagPresent);
-        const freq = new Map<string, number>();
-        for (const i of presentInfos) {
-          const k = [...i.triggers.map((t) => t.semanticKey)].sort().join('|');
-          freq.set(k, (freq.get(k) ?? 0) + 1);
-        }
-        const majoritySet = [...freq.entries()].sort((x, y) => y[1] - x[1])[0]?.[0] ?? '';
-
-        const rank = (i: ContainerTriggerInfo) => {
-          if (!i.tagPresent) return 2;
-          const hasPendingOp = pendingTriggerOps.some(
-            (op) => op.tagRowKey === tagRowKey && op.steps.some((s) => s.containerId === i.containerId),
-          );
-          if (hasPendingOp) return 0;
-          const thisSet = [...i.triggers.map((t) => t.semanticKey)].sort().join('|');
-          return thisSet === majoritySet ? 1 : 0; // identical to majority → just above absent
-        };
-        return rank(a) - rank(b);
-      }).map((info) => {
+      {infos.map((info) => {
         const isInconsistent = !consistent && info.tagPresent;
 
         // Pending operations for this container
