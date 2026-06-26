@@ -1,187 +1,158 @@
 # PRD — Actions déclencheurs (Monitoring > TagDrawer)
 
-**Version** : 1.0  
+**Version** : 1.1  
 **Date** : 2026-06-26  
 **Auteur** : Digital Keys  
-**Statut** : Draft
+**Statut** : Validé — prêt à implémenter
 
 ---
 
 ## 1. Contexte
 
-La page Monitoring affiche une matrice de couverture des tags GTM sur N containers. En cliquant sur une ligne Tags, le `TagDrawer` s'ouvre avec deux onglets : **Déclencheurs** et **Renommer**.
+La page Monitoring > onglet Tags > `TagDrawer` > onglet **Déclencheurs** montre, pour chaque container, quels triggers sont associés au tag sélectionné. La comparaison est sémantique (type + condition, pas le nom du trigger).
 
-L'onglet Déclencheurs montre, pour chaque container, quels déclencheurs sont associés au tag sélectionné. La comparaison est sémantique (type + condition, pas le nom). Des badges signalent les incohérences : "déclencheurs variés" sur la ligne de la matrice, cartes rouges dans le drawer.
-
-**Aujourd'hui** : lecture seule. L'utilisateur détecte le problème mais ne peut rien faire depuis cet écran.
-
-**Besoin** : depuis le même drawer, planifier des corrections de déclencheurs sur un ou plusieurs containers, dans la même logique de queue que les renommages (exécution différée post-OAuth).
+Aujourd'hui c'est lecture seule. Ce PRD définit les actions à ajouter.
 
 ---
 
-## 2. Utilisateurs cibles
+## 2. Les deux actions
 
-Mêmes que le PRD principal — Digital Keys et PFS. Usage typique : un consultant DK audite les containers avant une mise en production, détecte que le tag `purchase` se déclenche sur "All Pages" dans Swiss, corrige directement depuis l'interface.
+### 2.1 Retirer un déclencheur
 
----
+Cas typique : Swiss purchase a `DL - purchase` (correct) + `All Pages` (pageview, problème). Je veux enlever `All Pages`.
 
-## 3. Problèmes couverts
+**UX** : bouton `[Retirer]` visible au survol de chaque ligne trigger dans la carte container. Clic → queues l'opération pour ce container uniquement. Pas de sélection multi-containers — une carte, un retrait.
 
-| Problème détecté dans le drawer | Action requise |
-|---|---|
-| Tag purchase déclenche sur "All Pages" (pageview) dans un container — collecte purchase à chaque page | Retirer ce déclencheur |
-| Container AF déclenche `add_to_cart` sur `customEvent::add_to_cart` mais TK utilise `customEvent::addToCart` (casse différente) | Synchroniser depuis la référence |
-| Tag `begin_checkout` présent dans IBE mais sans aucun déclencheur lié | Lier un déclencheur existant |
-| Containers TK + COR ont 2 déclencheurs pour purchase (correct), Swiss n'en a qu'un | Synchroniser depuis TK |
+**Cas limite** : si c'est le dernier déclencheur du tag dans ce container, avertissement "Ce tag sera désactivé (plus aucun déclencheur)". L'utilisateur doit confirmer explicitement.
+
+**Opération GTM** : PUT sur le tag — `firingTriggerId` sans l'ID du trigger retiré. Le trigger lui-même n'est pas supprimé du container.
 
 ---
 
-## 4. Actions définies
+### 2.2 Synchroniser depuis une référence
 
-### 4.1 Retirer un déclencheur
+Cas typique : TK purchase n'a que `DL - purchase`. Swiss en a deux : `DL - purchase` + `All Pages`. Je synchronise depuis TK → Swiss doit finir identique à TK, `All Pages` est retiré.
 
-**Déclencheur UX** : bouton "Retirer" au survol de chaque ligne de trigger dans la carte container.
+**Règle validée** : le container cible doit finir **identiquement** à la référence — les triggers sémantiquement absents de la référence sont retirés du cible, les triggers manquants sont ajoutés.
 
-**Flux** :
-1. Clic "Retirer" sur un trigger (ex: "All Pages" dans Swiss)
-2. Mini-modal inline (pas de nouveau drawer) : 
-   - Affiche le trigger à retirer + sa clé sémantique
-   - Liste les containers qui ont ce même trigger sémantique lié au tag (pas seulement Swiss — peut-être aussi d'autres)
-   - Checkbox par container, Swiss pré-coché
-3. Bouton "Planifier le retrait"
-4. Opération ajoutée à la queue `pendingTriggerOps`
+**Règle clé sur la création** : avant de créer un nouveau trigger dans un container cible, l'outil vérifie s'il existe déjà un trigger avec la même clé sémantique (même type + conditions) — même si son nom est différent. Si trouvé, on lie l'existant plutôt que d'en créer un doublon.
 
-**Opération GTM** : PUT sur le tag, `firingTriggerId` sans l'ID du trigger retiré.
+Exemple : TK a `DL - purchase` (`customEvent::purchase`). AF a `Custom Event - purchase` (`customEvent::purchase`) → même clé sémantique → on lie `Custom Event - purchase` sans rien créer.
 
-**Contraintes** :
-- Ne propose que les containers où ce trigger sémantique est effectivement lié au tag
-- Si retirer ce trigger laisserait le tag sans aucun déclencheur → avertissement "Ce tag n'aura plus aucun déclencheur dans ce container"
-- Ne supprime pas le trigger de GTM — le dissocie seulement du tag
-
----
-
-### 4.2 Synchroniser depuis une référence
-
-**Déclencheur UX** : bouton "Synchroniser" dans la barre d'action du drawer (visible uniquement si incohérence détectée).
-
-**Flux** :
-1. Clic "Synchroniser"
-2. Sélecteur de container de référence (dropdown — seuls les containers avec le tag sont proposés)
-3. Aperçu automatique par container cible :
+**UX** :
+1. Bouton `[Synchroniser depuis une référence]` affiché dans le drawer uniquement si une incohérence est détectée (badge "déclencheurs variés" présent)
+2. Sélecteur de container de référence (dropdown — seulement les containers avec le tag)
+3. Aperçu par container cible :
    - Vert "Déjà identique" — rien à faire
-   - Orange "À synchroniser" — avec détail des différences sémantiques
-   - Gris "Tag absent" — exclu de la synchronisation (ne peut pas créer un tag)
-4. Checkboxes pour sélectionner les containers cibles à corriger
-5. Bouton "Planifier la synchronisation"
-6. Opérations ajoutées à `pendingTriggerOps`
+   - Orange "À synchroniser" — sous-détail : triggers à ajouter / triggers à retirer / triggers à lier (existant trouvé)
+   - Gris "Tag absent" — exclu de la synchronisation
+4. Checkboxes pour choisir quels containers synchroniser
+5. Bouton `[Planifier la synchronisation]` → ajoute les opérations à la queue
 
-**Opération GTM** (par container cible) :
-- Pour chaque trigger sémantique de la référence :
-  - Chercher un trigger équivalent dans le container cible (même `triggerSemanticKey`)
-  - Si trouvé → utiliser son ID existant → PUT tag avec cet ID dans `firingTriggerId`
-  - Si non trouvé → POST nouveau trigger (config copiée de la référence, nom repris), puis PUT tag
-- Pour chaque trigger lié au tag cible mais absent de la référence → retirer de `firingTriggerId`
-
-**Contraintes** :
-- Un trigger sémantiquement identique peut avoir un nom différent entre containers — c'est normal, l'outil cherche par sémantique et réutilise l'existant
-- Si création nécessaire : le nom du nouveau trigger = nom du trigger de référence (sans convention forcée)
-- La synchronisation ne modifie que le tag sélectionné, pas les autres tags du container
+**Opérations GTM par container cible** :
+- Pour chaque trigger dans la référence non présent sémantiquement dans le cible :
+  - Si un trigger sémantiquement équivalent existe dans le cible → PUT tag pour lier son ID
+  - Sinon → POST nouveau trigger (config de la référence, nom repris tel quel) + PUT tag
+- Pour chaque trigger lié au tag cible absent sémantiquement de la référence → PUT tag pour délier
 
 ---
 
-### 4.3 Lier un déclencheur existant
+## 3. Ce qui n'est PAS dans ce PRD
 
-**Déclencheur UX** : dans la carte d'un container où le tag est présent mais sans déclencheur, bouton "Lier un déclencheur".
+**"Lier un déclencheur existant"** (tag présent sans aucun déclencheur) : action différée. La synchro couvre ce cas si on définit un container de référence. Une action dédiée peut être ajoutée en v2.
 
-**Flux** :
-1. Clic "Lier un déclencheur" dans la carte du container concerné
-2. Liste déroulante des triggers disponibles dans ce container (nom + type), filtrée par pertinence sémantique si possible (ex: `customEvent` en tête pour un tag GA4 Event)
-3. Sélection d'un trigger → aperçu "Ce tag déclenchera sur : [nom]"
-4. Bouton "Planifier le lien"
-5. Opération ajoutée à `pendingTriggerOps`
+**Modifier les conditions d'un trigger** (ex: changer l'event name) : hors scope — nécessite un éditeur de conditions complet.
 
-**Opération GTM** : PUT sur le tag, `firingTriggerId` avec l'ID sélectionné ajouté.
-
-**Contraintes** :
-- La liste est construite depuis `container.triggers` dans les données de monitoring — données mock en v1, données live post-OAuth
-- Ne propose que les triggers du même container (impossible de lier un trigger d'un autre container)
+**Créer un trigger from scratch** : hors scope v1.
 
 ---
 
-## 5. Modèle de données
+## 4. Modèle de données
 
-### `TriggerOperation` (nouveau type dans `src/types/gtm.ts`)
+### `TriggerOperation` — nouveau type dans `src/types/gtm.ts`
 
 ```typescript
-export type TriggerOpType = 'remove' | 'sync' | 'link';
+export type TriggerOpKind = 'remove' | 'sync';
 
-export interface TriggerOperationTarget {
+export interface TriggerOpStep {
   containerId: string;
   containerName: string;
   publicId: string;
-  // 'remove' : retire triggerId du tag
-  // 'link'   : ajoute triggerId au tag
-  // 'sync'   : combinaison — peut inclure retrait + ajout + création
-  action: 'unlink' | 'link_existing' | 'create_and_link';
-  existingTriggerId?: string;   // pour unlink et link_existing
-  triggerConfig?: GTMTrigger;   // pour create_and_link (config à copier)
+  // Ce que cette étape fait sur le tag :
+  unlink?: string[];             // IDs de triggers à délier du tag
+  linkExisting?: string[];       // IDs de triggers existants à lier
+  create?: GTMTrigger[];         // Triggers à créer puis lier
 }
 
 export interface TriggerOperation {
   id: string;
-  type: TriggerOpType;
-  tagRowKey: string;            // event_name ou nom du tag
+  kind: TriggerOpKind;
+  tagRowKey: string;             // event_name ou nom du tag (label d'affichage)
   tagCategory: string;
-  triggerName: string;          // nom du trigger concerné (pour affichage)
-  triggerSemanticKey: string;   // pour déduplication
-  referenceContainerId?: string; // pour sync
-  targets: TriggerOperationTarget[];
+  // Pour 'sync' :
+  referenceContainerId?: string;
+  referenceContainerName?: string;
+  // Pour 'remove' :
+  triggerName?: string;          // label du trigger retiré
+  triggerSemanticKey?: string;
+  // Cible(s) :
+  steps: TriggerOpStep[];
   status: 'pending' | 'applied' | 'failed';
   createdAt: string;
   error?: string;
 }
 ```
 
-### Store Zustand (`gtm-store.ts`)
+### Store Zustand
 
-Ajouter à côté de `pendingRenames` :
 ```typescript
 pendingTriggerOps: TriggerOperation[]
-addTriggerOp: (op: Omit<TriggerOperation, 'id' | 'status' | 'createdAt'>) => void
+addTriggerOp:    (op: Omit<TriggerOperation, 'id' | 'status' | 'createdAt'>) => void
 removeTriggerOp: (id: string) => void
 clearTriggerOps: () => void
 ```
 
-### Plan d'opérations partagé
+---
 
-Le panneau "Plan de renommage" existant devient un **Plan d'opérations** qui affiche les deux queues (renames + trigger ops) séparément, avec un compteur global dans le header.
+## 5. UX — Localisation dans le drawer
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  [GA4]  purchase          [Déclencheurs différents]  X  │
+│  5 containers · 1 absent                                │
+│  ┌───────────────────────┬────────────────────────┐     │
+│  │  Déclencheurs         │  Renommer              │     │
+│  └───────────────────────┴────────────────────────┘     │
+│                                                         │
+│  [Synchroniser depuis une référence]  ← si incohérence  │
+│                                                         │
+│  ┌── TK · GTM-001 ─────────────────────────────────┐   │
+│  │  [Custom Event]  DL - purchase                  │   │
+│  └─────────────────────────────────────────────────┘   │
+│                                                         │
+│  ┌── Swiss · GTM-005 ─────────────────────────────────┐ │
+│  │  [Custom Event]  DL - purchase                  │   │
+│  │  [Page Vue]  All Pages  Toutes les pages  [Ret.] │   │  ← au survol
+│  └─────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────┘
+```
 
 ---
 
-## 6. UX — Localisation des actions dans le drawer
+## 6. Plan d'opérations — deux boutons séparés dans le header
 
 ```
-┌─────────────────────────────────────────────────────┐
-│  [GA4]  purchase                        [X]         │
-│  5 containers · 1 déclencheur différent             │
-│  ┌──────────────────┬──────────────────┐            │
-│  │  Déclencheurs    │    Renommer      │            │
-│  └──────────────────┴──────────────────┘            │
-│                                                     │
-│  [Synchroniser depuis une référence]  ← bouton     │
-│  (visible seulement si incohérence)                 │
-│                                                     │
-│  ┌── Swiss · GTM-XXXXX ─────────────────────────┐  │
-│  │  [Page Vue]  All Pages  Toutes les pages  [x] │  │  ← x = Retirer
-│  │  [Custom Event]  DL - purchase               │  │
-│  └──────────────────────────────────────────────┘  │
-│                                                     │
-│  ┌── IBE · GTM-XXXXX ──────────────────────────┐   │
-│  │  (aucun déclencheur lié)                    │   │
-│  │  [Lier un déclencheur]                      │   │
-│  └─────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────┘
+[ 2 renommages planifiés ]   [ 1 action déclencheur ]   [ Mode aperçu ]   [ Scanner ]
 ```
+
+Chaque bouton ouvre son propre panneau latéral.
+
+Le panneau "Actions déclencheurs" liste les `TriggerOperation` pendantes avec :
+- Type (Retrait / Synchronisation)
+- Tag concerné
+- Containers impactés avec détail des étapes
+- Bouton supprimer l'opération
+- Footer : `[Tout effacer]` + `[Appliquer (OAuth requis)]`
 
 ---
 
@@ -189,41 +160,31 @@ Le panneau "Plan de renommage" existant devient un **Plan d'opérations** qui af
 
 | Situation | Comportement |
 |---|---|
-| Retrait du dernier déclencheur d'un tag | Avertissement "Ce tag sera désactivé dans ce container (aucun déclencheur)" — confirmation requise |
-| Synchronisation : trigger sémantique absent du container cible | Création automatique (config copiée de la référence) — indiqué dans l'aperçu |
-| Synchronisation : container cible sans le tag | Exclu de la liste des cibles (on ne crée pas de tag depuis cet écran) |
-| Trigger lié à plusieurs tags | Le retrait / la modification ne touchent que le tag sélectionné dans le drawer |
-| Opération déjà planifiée pour ce tag + container | Bloquer le doublon, indiquer "Opération déjà planifiée" dans l'aperçu |
-| Données mock (pré-OAuth) | Toutes les actions sont planifiables — exécution bloquée jusqu'à OAuth (même comportement que les renames) |
+| Retrait du dernier déclencheur | Avertissement + confirmation explicite requise |
+| Sync : trigger sémantiquement équivalent trouvé dans le cible | Lier l'existant, ne pas créer de doublon |
+| Sync : aucun équivalent trouvé dans le cible | Créer le trigger (config de la référence) + lier |
+| Sync : tag absent dans un container | Exclu de la synchronisation — affiché en gris dans l'aperçu |
+| Opération déjà planifiée pour ce tag + container | Bloquer le doublon, indiquer "Déjà planifié" |
+| Sync sans incohérence détectée | Bouton Synchroniser masqué |
+| Données mock (pré-OAuth) | Planification disponible — exécution bloquée jusqu'à OAuth |
 
 ---
 
-## 8. Ce qui est hors scope
-
-- Créer un trigger from scratch avec un éditeur de conditions complet — la synchronisation copie depuis une référence, pas de création manuelle
-- Modifier les conditions d'un trigger existant (ex: changer l'event name)
-- Actions depuis l'onglet Déclencheurs de la matrice principale (pas le drawer Tags)
-- Réordonner les priorités de déclenchement
-
----
-
-## 9. Dépendances
+## 8. Dépendances
 
 | Dépendance | Statut |
 |---|---|
-| GCP OAuth | Requis pour l'exécution — planification disponible en mode mock |
+| GCP OAuth | Requis pour l'exécution seulement |
 | `TriggerOperation` dans `gtm.ts` | À créer |
-| Queue `pendingTriggerOps` dans le store | À ajouter |
-| Panneau Plan d'opérations (extension du plan renames actuel) | À étendre |
+| `pendingTriggerOps` dans le store | À ajouter |
+| Panneau "Actions déclencheurs" (nouveau) | À créer |
 | API GTM `tags.update` + `triggers.create` | Disponible post-OAuth |
 
 ---
 
-## 10. Ordre d'implémentation suggéré
+## 9. Ordre d'implémentation
 
-1. `TriggerOperation` type + store
-2. Action "Retirer" (la plus simple — pas de création de trigger)
-3. Panneau Plan d'opérations étendu (affiche trigger ops + renames)
-4. Action "Lier un déclencheur existant" (liste les triggers du container)
-5. Action "Synchroniser" (la plus complexe — implique create_and_link)
-6. Exécution API (post-OAuth)
+1. `TriggerOperation` type + store (`pendingTriggerOps`)
+2. Action **Retirer** dans le drawer (plus simple — pas de création)
+3. Bouton + panneau "Actions déclencheurs" dans le header
+4. Action **Synchroniser** — aperçu + sélecteur de référence + queue
