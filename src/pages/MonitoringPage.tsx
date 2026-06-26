@@ -3,6 +3,7 @@ import { clsx } from 'clsx';
 import { MONITORING_MOCK, type MonitoringContainerData } from '../data/monitoring-mock';
 import { RenameDrawer, type ContainerOption } from '../components/monitoring/RenameDrawer';
 import { VariableContentDrawer } from '../components/monitoring/VariableContentDrawer';
+import { TagDetailDrawer } from '../components/monitoring/TagDetailDrawer';
 import { ParamMatrixTab } from '../components/monitoring/ParamMatrixTab';
 import { useGTMStore } from '../store/gtm-store';
 import type { GTMTag, GTMTrigger, GTMVariable } from '../types/gtm';
@@ -462,6 +463,7 @@ export function MonitoringPage() {
   const [search, setSearch] = useState('');
   const [renameRow, setRenameRow] = useState<MatrixRow | null>(null);
   const [contentRow, setContentRow] = useState<MatrixRow | null>(null);
+  const [tagDetailRow, setTagDetailRow] = useState<MatrixRow | null>(null);
   const [showPlan, setShowPlan] = useState(false);
 
   const containers: MonitoringContainerData[] = MONITORING_MOCK;
@@ -504,9 +506,15 @@ export function MonitoringPage() {
     if (activeKind === 'variables') {
       setContentRow(row);
       setRenameRow(null);
+      setTagDetailRow(null);
+    } else if (activeKind === 'tags') {
+      setTagDetailRow(row);
+      setRenameRow(null);
+      setContentRow(null);
     } else {
       setRenameRow(row);
       setContentRow(null);
+      setTagDetailRow(null);
     }
   }
 
@@ -680,6 +688,19 @@ export function MonitoringPage() {
               : 'Données simulées · cliquez une ligne pour renommer · badge violet = plan de renommage'}
           </div>
         </>
+      )}
+
+      {/* Tag Detail Drawer */}
+      {tagDetailRow && (
+        <TagDetailDrawer
+          rowKey={tagDetailRow.key}
+          category={tagDetailRow.category}
+          categoryColor={getCategoryConfig('tags', tagDetailRow.category).color}
+          cells={tagDetailRow.cells}
+          containers={containers}
+          onClose={() => setTagDetailRow(null)}
+          onRename={() => { setRenameRow(tagDetailRow); setTagDetailRow(null); }}
+        />
       )}
 
       {/* Variable Content Drawer */}
