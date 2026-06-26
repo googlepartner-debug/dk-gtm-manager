@@ -4,6 +4,7 @@ import { Dashboard } from './pages/Dashboard';
 import { ContainersPage } from './pages/ContainersPage';
 import { PackagesPage } from './pages/PackagesPage';
 import { DeployPage } from './pages/DeployPage';
+import { MonitoringPage } from './pages/MonitoringPage';
 import { HistoryPage } from './pages/HistoryPage';
 
 export default function App() {
@@ -16,6 +17,7 @@ export default function App() {
           <Route path="containers" element={<ContainersPage />} />
           <Route path="packages" element={<PackagesPage />} />
           <Route path="deploy" element={<DeployPage />} />
+          <Route path="monitoring" element={<MonitoringPage />} />
           <Route path="history" element={<HistoryPage />} />
         </Route>
       </Routes>

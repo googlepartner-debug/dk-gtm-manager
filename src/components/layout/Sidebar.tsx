@@ -37,6 +37,23 @@ const nav = [
   {
     icon: (
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <rect x="1" y="1" width="4" height="4" rx="1" fill="currentColor" opacity="0.4"/>
+        <rect x="6" y="1" width="4" height="4" rx="1" fill="currentColor"/>
+        <rect x="11" y="1" width="4" height="4" rx="1" fill="currentColor" opacity="0.6"/>
+        <rect x="1" y="6" width="4" height="4" rx="1" fill="currentColor"/>
+        <rect x="6" y="6" width="4" height="4" rx="1" fill="currentColor" opacity="0.3"/>
+        <rect x="11" y="6" width="4" height="4" rx="1" fill="currentColor"/>
+        <rect x="1" y="11" width="4" height="4" rx="1" fill="currentColor" opacity="0.6"/>
+        <rect x="6" y="11" width="4" height="4" rx="1" fill="currentColor"/>
+        <rect x="11" y="11" width="4" height="4" rx="1" fill="currentColor" opacity="0.2"/>
+      </svg>
+    ),
+    label: 'Monitoring',
+    to: '/dashboard/monitoring',
+  },
+  {
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
         <path d="M2 4h12v1.5H2V4zm1.5 3.5h9v1.5h-9V7.5zm1.5 3.5h6v1.5H5V11z" fill="currentColor"/>
       </svg>
     ),

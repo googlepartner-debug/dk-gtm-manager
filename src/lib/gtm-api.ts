@@ -96,6 +96,19 @@ export async function listTags(
   );
 }
 
+export async function listTagsFull(
+  token: string,
+  accountId: string,
+  containerId: string,
+  workspaceId: string
+): Promise<GTMTag[]> {
+  const data = await request<{ tag?: GTMTag[] }>(
+    `/accounts/${accountId}/containers/${containerId}/workspaces/${workspaceId}/tags`,
+    token
+  );
+  return data.tag ?? [];
+}
+
 // ─── Variables ────────────────────────────────────────────────────────────────
 
 export async function createVariable(
