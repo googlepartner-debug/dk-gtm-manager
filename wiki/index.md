@@ -7,6 +7,7 @@
 | [[auth-strategy]] | OAuth GCP différé, fallback gtm-static.ts, pattern token optionnel |
 | [[deployment-flow]] | Sélection containers → packages → diff → matrix → deploy |
 | [[design-system]] | Charte DK, tokens CSS, composants UI (Button, Badge, Combobox) |
-| [[deferred-features]] | GCP OAuth, usage tracking, rollback button |
+| [[monitoring]] | Page Monitoring — matrice couverture, renommage groupé, comparaison contenu variables |
+| [[deferred-features]] | GCP OAuth, monitoring live, usage tracking, rollback button |
 
 _Mis à jour : 2026-06-26_

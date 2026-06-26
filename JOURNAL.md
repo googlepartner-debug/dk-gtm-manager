@@ -75,3 +75,43 @@ Le filtre event_name dans DiffView (chips) n'est pas utilisable sans GCP OAuth c
 2. Remplacement des chips par un input texte dans DiffView — meilleure UX quand OAuth sera disponible
 
 La matrice de couverture GA4 et le filtre DiffView restent dépendants de l'OAuth pour avoir de la vraie donnée container.
+
+---
+
+## 2026-06-26 (suite 2) — Page Monitoring complète
+
+**Correctif navigation Zustand**
+
+Bug identifié : `window.location.assign()` dans ContainersPage et PackagesPage provoquait un rechargement complet de la page, réinitialisant tout le store Zustand. Les containers sélectionnés disparaissaient en arrivant sur DeployPage. Corrigé par remplacement avec `useNavigate` de React Router — navigation SPA sans rechargement.
+
+Second correctif : la barre de recherche dans PackagesPage était conditionnée à `currentList.length > 0`, la rendant invisible sur un package vide. Condition supprimée.
+
+**Page Monitoring — Matrice de couverture**
+
+Nouvelle page `/dashboard/monitoring` avec matrice cross-containers. Principe : colonnes = containers sélectionnés (mock : Turkish, Air France, Corsair, Iberia, Swiss), lignes = entités, cellules = présent/absent coloré.
+
+Quatre onglets :
+- **Tags** : filtrable par catégorie (GA4, Kameleoon, Google Ads, Meta Pixel, TikTok, Hotjar, AB Tasty, Floodlight, HTML Custom). La rowKey des events GA4 est l'`event_name` (ex : `add_to_cart`) indépendamment du nom du tag, permettant de détecter les noms variés entre containers.
+- **Déclencheurs** : même matrice par type (pageview, customEvent, click, scrollDepth…)
+- **Variables** : même matrice par type (v, c, jsm, u, k, aev)
+- **Paramètres envoyés** : onglet dédié aux events GA4 — sélecteur d'event en chips (default : purchase), matrice paramètre × container. Cellules : vert = valeur identique partout, orange = valeurs différentes entre containers, rouge = paramètre absent du tag, gris = tag absent du container.
+
+Badge "noms variés" sur les lignes où le même event est tracké sous des noms différents selon les containers.
+
+**Renommage groupé**
+
+Clic sur une ligne Tags/Déclencheurs → drawer de renommage. Affiche le nom actuel dans chaque container, pré-sélectionne les containers à corriger (ceux dont le nom diffère de la cible). Le nom cible est pré-rempli avec le nom le plus fréquent. Les opérations sont empilées dans une queue Zustand (`pendingRenames: RenameOperation[]`) et visualisables dans un panneau latéral. Bouton "Appliquer" désactivé avec tooltip "GCP OAuth requis".
+
+**Comparaison de contenu variables**
+
+Clic sur une ligne Variables → nouveau drawer de comparaison de contenu (pas de renommage direct). Affiche le contenu de la variable dans chaque container, adapté au type :
+- `jsm` (Custom JS) : bloc de code dark avec diff ligne par ligne (+/−) entre le contenu de référence et les variantes
+- `c` (Constante) : valeur affichée inline (ex : EUR vs CHF)
+- `v` (Data Layer) : chemin DL comparé
+- `u`, `k` : composant URL / nom de cookie
+
+Le drawer a un bouton "Renommer" pour standardiser les noms si nécessaire (contrainte : la comparaison ne fonctionne que si les variables portent exactement le même nom dans tous les containers).
+
+**Données mock**
+
+Fichier `src/data/monitoring-mock.ts` avec 5 containers réalistes (Turkish Airlines, Air France, Corsair, Iberia, Swiss) et des écarts intentionnels : currency hardcodée (`'EUR'`) chez Air France vs variable chez les autres, `item_country` présent dans `JS - ecommerce.items` chez TK et SWI mais absent chez COR, différences de nommage de variables (`Constante - GA4 ID` vs `Var - GA4 ID`), `Constante - Currency` = CHF chez Swiss vs EUR ailleurs.

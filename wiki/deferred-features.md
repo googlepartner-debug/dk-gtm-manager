@@ -1,10 +1,11 @@
 # Features différées — DK GTM Manager
 
-## Filtre GA4 sur données containers réelles
+## Monitoring live — scan des containers réels
 
-**Description** : pouvoir taper `add_to_cart` et voir quels tags dans les containers GTM sélectionnés trackent cet event — indépendamment du nom du tag.
-**Dépend de** : GCP OAuth (lire les workspaces des containers).
-**État actuel** : le filtre chips dans DiffView et la GA4CoverageMatrix existent mais ne fonctionnent que sur les données de diff post-analyse. Sans OAuth, seule la recherche dans le package local est disponible.
+**Description** : la page Monitoring fonctionne actuellement sur des données mock (`monitoring-mock.ts`). L'objectif est de scanner les vrais containers GTM sélectionnés pour alimenter la matrice de couverture et la comparaison de contenu.
+**Dépend de** : GCP OAuth + `listTagsFull` / `listVariablesFull` / `listTriggersFull` dans `gtm-api.ts`.
+**État actuel** : page Monitoring complète (Tags / Déclencheurs / Variables / Paramètres envoyés), renommage groupé queue, comparaison de contenu Custom JS — tout fonctionnel sur mock. Bouton "Scanner" désactivé avec tooltip "GCP OAuth requis".
+**Quand** : même déblocage que GCP OAuth global. Voir [[auth-strategy]].
 
 ## GCP OAuth
 
