@@ -382,6 +382,7 @@ function TriggersTab({
   tagRowKey,
   onRemove,
   onCancelOp,
+  onSync,
 }: {
   infos: ContainerTriggerInfo[];
   consistent: boolean;
