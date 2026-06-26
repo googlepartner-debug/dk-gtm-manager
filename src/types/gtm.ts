@@ -160,9 +160,24 @@ export interface TriggerOperation {
   referenceContainerId?: string;
   referenceContainerName?: string;
   steps: TriggerOpStep[];
-  status: 'pending' | 'applied' | 'failed';
+  status: 'pending' | 'applied' | 'failed' | 'cancelled';
   createdAt: string;
   error?: string;
+}
+
+// ─── Deletion queue ────────────────────────────────────────────────────────────
+
+export interface DeletionOperation {
+  id: string;
+  kind: 'trigger' | 'variable';
+  containerId: string;
+  containerName: string;
+  publicId: string;
+  entityName: string;
+  entityType: string;
+  entityId?: string;
+  status: 'pending' | 'applied' | 'cancelled';
+  createdAt: string;
 }
 
 // ─── Rename queue ──────────────────────────────────────────────────────────────

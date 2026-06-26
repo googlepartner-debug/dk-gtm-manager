@@ -5,12 +5,14 @@ import { RenameDrawer, type ContainerOption } from '../components/monitoring/Ren
 import { VariableContentDrawer } from '../components/monitoring/VariableContentDrawer';
 import { TagDrawer } from '../components/monitoring/TagDrawer';
 import { ParamMatrixTab } from '../components/monitoring/ParamMatrixTab';
+import { CleaningTab } from '../components/monitoring/CleaningTab';
+import { TagTypeIcon } from '../components/monitoring/TagTypeIcon';
 import { useGTMStore } from '../store/gtm-store';
 import type { GTMTag, GTMTrigger, GTMVariable } from '../types/gtm';
 
 // ─── Entity kind ───────────────────────────────────────────────────────────────
 
-type EntityKind = 'tags' | 'triggers' | 'variables' | 'params';
+type EntityKind = 'tags' | 'triggers' | 'variables' | 'params' | 'cleaning';
 
 // ─── Category configs per kind ─────────────────────────────────────────────────
 
@@ -323,11 +325,14 @@ function MatrixTable({
               {showCategoryHeader && (
                 <tr key={`cat-${row.category}`} style={{ backgroundColor: 'hsl(220 20% 98%)' }}>
                   <td colSpan={containers.length + 1} className="px-4 py-1.5 border-b" style={{ borderColor: 'hsl(220 13% 91%)' }}>
-                    <span
-                      className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider"
-                      style={{ backgroundColor: config.color + '22', color: config.color }}
-                    >
-                      {config.label}
+                    <span className="inline-flex items-center gap-1.5">
+                      {kind === 'tags' && <TagTypeIcon category={row.category} size={16} />}
+                      <span
+                        className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider"
+                        style={{ backgroundColor: config.color + '22', color: config.color }}
+                      >
+                        {config.label}
+                      </span>
                     </span>
                   </td>
                 </tr>
@@ -494,9 +499,86 @@ function RenamePlanPanel({ onClose }: { onClose: () => void }) {
 
 // ─── Trigger ops panel ────────────────────────────────────────────────────────
 
+function OpCard({ op, onCancel, onDelete }: {
+  op: import('../types/gtm').TriggerOperation;
+  onCancel?: () => void;
+  onDelete?: () => void;
+}) {
+  const isPending = op.status === 'pending';
+  const isCancelled = op.status === 'cancelled';
+  const isApplied = op.status === 'applied';
+
+  return (
+    <div
+      className="flex items-start gap-3 px-3 py-2.5 rounded-lg border"
+      style={{
+        borderColor: isPending ? 'hsl(220 13% 88%)' : isCancelled ? 'hsl(220 13% 93%)' : 'hsl(142 60% 75%)',
+        backgroundColor: isCancelled ? 'hsl(220 20% 98%)' : isApplied ? 'hsl(142 72% 97%)' : 'white',
+        opacity: isCancelled ? 0.55 : 1,
+      }}
+    >
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5 mb-1">
+          <span
+            className="px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider shrink-0"
+            style={{ backgroundColor: op.kind === 'remove' ? 'hsl(0 85% 97%)' : 'hsl(142 72% 95%)', color: op.kind === 'remove' ? 'hsl(0 70% 50%)' : 'hsl(142 60% 28%)' }}
+          >
+            {op.kind === 'remove' ? 'Retrait' : 'Sync'}
+          </span>
+          <span className="text-xs font-medium text-foreground truncate">{op.tagRowKey}</span>
+          <span className="text-[10px] text-muted-fg shrink-0">{op.tagCategory}</span>
+          {!isPending && (
+            <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded shrink-0 font-medium"
+              style={{
+                backgroundColor: isCancelled ? 'hsl(220 13% 91%)' : 'hsl(142 60% 93%)',
+                color: isCancelled ? 'hsl(220 13% 45%)' : 'hsl(142 50% 30%)',
+              }}>
+              {isCancelled ? 'Annulée' : 'Effectuée'}
+            </span>
+          )}
+        </div>
+        {op.triggerName && (
+          <p className="text-[11px] font-mono mb-1" style={{ color: 'hsl(220 13% 35%)' }}>
+            Retirer : {op.triggerName}
+          </p>
+        )}
+        <div className="space-y-0.5">
+          {op.steps.map((step, i) => (
+            <div key={i} className="flex items-center gap-1.5 text-[10px]" style={{ color: 'hsl(220 13% 50%)' }}>
+              <svg width="8" height="8" viewBox="0 0 8 8" fill="none" className="shrink-0"><circle cx="4" cy="4" r="3" stroke="currentColor" strokeWidth="1"/></svg>
+              <span className="font-medium">{step.containerName}</span>
+              <span className="font-mono">{step.publicId}</span>
+              {step.unlink && step.unlink.length > 0 && (
+                <span style={{ color: 'hsl(0 65% 50%)' }}>− {step.unlink.length}</span>
+              )}
+              {step.linkExisting && step.linkExisting.length > 0 && (
+                <span style={{ color: 'hsl(213 94% 45%)' }}>~ {step.linkExisting.length}</span>
+              )}
+              {step.createAndLink && step.createAndLink.length > 0 && (
+                <span style={{ color: 'hsl(142 60% 35%)' }}>+ {step.createAndLink.length}</span>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+      {isPending && onCancel && (
+        <button onClick={onCancel} className="p-1 rounded hover:bg-card text-muted-fg hover:text-foreground transition-colors shrink-0 mt-0.5" title="Annuler">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round"/></svg>
+        </button>
+      )}
+      {!isPending && onDelete && (
+        <button onClick={onDelete} className="p-1 rounded hover:bg-card text-muted-fg hover:text-foreground transition-colors shrink-0 mt-0.5" title="Supprimer de l'historique">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round"/></svg>
+        </button>
+      )}
+    </div>
+  );
+}
+
 function TriggerOpsPlanPanel({ onClose }: { onClose: () => void }) {
-  const { pendingTriggerOps, removeTriggerOp, clearTriggerOps } = useGTMStore();
+  const { pendingTriggerOps, removeTriggerOp, cancelTriggerOp, clearTriggerOps } = useGTMStore();
   const pending = pendingTriggerOps.filter((op) => op.status === 'pending');
+  const history = pendingTriggerOps.filter((op) => op.status !== 'pending');
 
   return (
     <>
@@ -505,61 +587,58 @@ function TriggerOpsPlanPanel({ onClose }: { onClose: () => void }) {
         <div className="px-5 py-4 border-b flex items-center justify-between" style={{ borderColor: 'hsl(220 13% 91%)' }}>
           <div>
             <h2 className="text-sm font-semibold text-foreground">Actions déclencheurs</h2>
-            <p className="text-xs text-muted-fg mt-0.5">{pending.length} opération{pending.length > 1 ? 's' : ''} planifiée{pending.length > 1 ? 's' : ''}</p>
+            <p className="text-xs text-muted-fg mt-0.5">
+              {pending.length > 0 ? `${pending.length} planifiée${pending.length > 1 ? 's' : ''}` : 'Aucune action en attente'}
+              {history.length > 0 ? ` · ${history.length} dans l'historique` : ''}
+            </p>
           </div>
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-card transition-colors text-muted-fg">
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 2l10 10M12 2L2 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-2">
-          {pending.map((op) => (
-            <div key={op.id} className="flex items-start gap-3 px-3 py-2.5 rounded-lg border" style={{ borderColor: 'hsl(220 13% 91%)' }}>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1.5 mb-1.5">
-                  <span
-                    className="px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider shrink-0"
-                    style={{ backgroundColor: op.kind === 'remove' ? 'hsl(0 85% 97%)' : 'hsl(142 72% 95%)', color: op.kind === 'remove' ? 'hsl(0 70% 50%)' : 'hsl(142 60% 28%)' }}
-                  >
-                    {op.kind === 'remove' ? 'Retrait' : 'Sync'}
-                  </span>
-                  <span className="text-xs font-medium text-foreground truncate">{op.tagRowKey}</span>
-                  <span className="text-[10px] text-muted-fg shrink-0">{op.tagCategory}</span>
-                </div>
-                {op.triggerName && (
-                  <p className="text-[11px] font-mono mb-1" style={{ color: 'hsl(220 13% 35%)' }}>
-                    Retirer : {op.triggerName}
-                  </p>
-                )}
-                <div className="space-y-0.5">
-                  {op.steps.map((step, i) => (
-                    <div key={i} className="flex items-center gap-1.5 text-[10px]" style={{ color: 'hsl(220 13% 50%)' }}>
-                      <svg width="8" height="8" viewBox="0 0 8 8" fill="none" className="shrink-0"><circle cx="4" cy="4" r="3" stroke="currentColor" strokeWidth="1"/></svg>
-                      <span className="font-medium">{step.containerName}</span>
-                      <span className="font-mono">{step.publicId}</span>
-                      {step.unlink && step.unlink.length > 0 && (
-                        <span style={{ color: 'hsl(0 65% 50%)' }}>− {step.unlink.length} lien{step.unlink.length > 1 ? 's' : ''}</span>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <button
-                onClick={() => removeTriggerOp(op.id)}
-                className="p-1 rounded hover:bg-card text-muted-fg hover:text-foreground transition-colors shrink-0 mt-0.5"
-                title="Annuler cette opération"
-              >
-                <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round"/></svg>
-              </button>
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
+          {pending.length === 0 && history.length === 0 && (
+            <div className="flex flex-col items-center gap-2 py-10 text-muted-fg">
+              <svg width="28" height="28" viewBox="0 0 28 28" fill="none"><circle cx="14" cy="14" r="12" stroke="currentColor" strokeWidth="1.5" opacity=".35"/><path d="M9 14l3.5 3.5L19 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" opacity=".6"/></svg>
+              <p className="text-xs">Aucune action planifiée</p>
             </div>
-          ))}
+          )}
+
+          {/* Pending ops */}
+          {pending.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-fg">En attente</p>
+              {pending.map((op) => (
+                <OpCard key={op.id} op={op} onCancel={() => cancelTriggerOp(op.id)} />
+              ))}
+            </div>
+          )}
+
+          {/* History */}
+          {history.length > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-fg">Historique</p>
+                <button onClick={() => history.forEach((op) => removeTriggerOp(op.id))}
+                  className="text-[10px] text-muted-fg hover:text-foreground underline decoration-dotted">
+                  Effacer
+                </button>
+              </div>
+              {history.map((op) => (
+                <OpCard key={op.id} op={op} onDelete={() => removeTriggerOp(op.id)} />
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="px-5 py-4 border-t space-y-2" style={{ borderColor: 'hsl(220 13% 91%)' }}>
-          <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg text-xs" style={{ backgroundColor: 'hsl(0 70% 50% / 0.07)', color: 'hsl(0 65% 45%)' }}>
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="shrink-0 mt-0.5"><circle cx="6" cy="6" r="5" stroke="currentColor" strokeWidth="1"/><path d="M6 4v2.5M6 8v.25" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round"/></svg>
-            Sera exécuté via l'API GTM après configuration GCP OAuth.
-          </div>
+          {pending.length > 0 && (
+            <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg text-xs" style={{ backgroundColor: 'hsl(0 70% 50% / 0.07)', color: 'hsl(0 65% 45%)' }}>
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="shrink-0 mt-0.5"><circle cx="6" cy="6" r="5" stroke="currentColor" strokeWidth="1"/><path d="M6 4v2.5M6 8v.25" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round"/></svg>
+              Sera exécuté via l'API GTM après configuration GCP OAuth.
+            </div>
+          )}
           <div className="flex items-center gap-2">
             <button
               onClick={() => { clearTriggerOps(); onClose(); }}
@@ -590,10 +669,11 @@ const KIND_LABELS: Record<EntityKind, string> = {
   triggers: 'Déclencheurs',
   variables: 'Variables',
   params: 'Paramètres envoyés',
+  cleaning: 'Nettoyage',
 };
 
 export function MonitoringPage() {
-  const { pendingRenames, addRenames, pendingTriggerOps } = useGTMStore();
+  const { pendingRenames, addRenames, pendingTriggerOps, pendingDeletions } = useGTMStore();
   const [activeKind, setActiveKind] = useState<EntityKind>('tags');
   const [activeCategory, setActiveCategory] = useState<string>('Tous');
   const [search, setSearch] = useState('');
@@ -602,6 +682,7 @@ export function MonitoringPage() {
   const [tagRow, setTagRow] = useState<MatrixRow | null>(null);
   const [showPlan, setShowPlan] = useState(false);
   const [showTriggerOps, setShowTriggerOps] = useState(false);
+  const [selectedRow, setSelectedRow] = useState<MatrixRow | null>(null);
 
   const containers: MonitoringContainerData[] = MONITORING_MOCK;
   const containerIds = containers.map((c) => c.containerId);
@@ -629,6 +710,8 @@ export function MonitoringPage() {
   const stats = useMemo(() => coverageStats(rows, containerIds), [rows, containerIds]);
   const pendingCount = pendingRenames.filter((r) => r.status === 'pending').length;
   const pendingTriggerCount = pendingTriggerOps.filter((op) => op.status === 'pending').length;
+  const pendingDeletionCount = pendingDeletions.filter((op) => op.status === 'pending').length;
+  const allTriggerOpsCount = pendingTriggerOps.length;
 
   function buildContainerOptions(row: MatrixRow): ContainerOption[] {
     return containers.map((c) => ({
@@ -663,11 +746,30 @@ export function MonitoringPage() {
         }
       }
     }
+    // Count orphans for cleaning badge
+    let orphanCount = 0;
+    for (const c of containers) {
+      const usedIds = new Set<string>();
+      for (const tag of c.tags) { for (const id of tag.firingTriggerId ?? []) usedIds.add(id); }
+      orphanCount += c.triggers.filter((tr) => tr.triggerId && !usedIds.has(tr.triggerId)).length;
+      const usedVars = new Set<string>();
+      const scan = (params?: import('../types/gtm').GTMParameter[]) => {
+        for (const p of params ?? []) {
+          if (p.value) { const re = /\{\{([^}]+)\}\}/g; let m; while ((m = re.exec(p.value)) !== null) usedVars.add(m[1]); }
+          scan(p.list); scan(p.map);
+        }
+      };
+      for (const tag of c.tags) scan(tag.parameter);
+      for (const tr of c.triggers) { scan(tr.parameter); for (const f of tr.filter ?? []) scan(f.parameter); }
+      for (const v of c.variables) scan(v.parameter);
+      orphanCount += c.variables.filter((v) => !usedVars.has(v.name)).length;
+    }
     return {
       tags: buildMatrix('tags', containers, 'Tous', '').length,
       triggers: buildMatrix('triggers', containers, 'Tous', '').length,
       variables: buildMatrix('variables', containers, 'Tous', '').length,
       params: ga4Events.size,
+      cleaning: orphanCount,
     };
   }, []);
 
@@ -681,14 +783,17 @@ export function MonitoringPage() {
             <p className="text-xs text-muted-fg mt-0.5">Visualisez la présence de chaque entité · cliquez une ligne pour renommer</p>
           </div>
           <div className="flex items-center gap-2">
-            {pendingTriggerCount > 0 && (
+            {allTriggerOpsCount > 0 && (
               <button
                 onClick={() => setShowTriggerOps(true)}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:opacity-80"
-                style={{ backgroundColor: 'hsl(0 70% 50% / 0.1)', color: 'hsl(0 65% 45%)' }}
+                style={{
+                  backgroundColor: pendingTriggerCount > 0 ? 'hsl(0 70% 50% / 0.1)' : 'hsl(220 13% 91%)',
+                  color: pendingTriggerCount > 0 ? 'hsl(0 65% 45%)' : 'hsl(220 13% 45%)',
+                }}
               >
                 <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M5 1v4M5 7v.5" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round"/><circle cx="5" cy="5" r="4" stroke="currentColor" strokeWidth="1"/></svg>
-                {pendingTriggerCount} action{pendingTriggerCount > 1 ? 's' : ''} déclencheur{pendingTriggerCount > 1 ? 's' : ''}
+                {pendingTriggerCount > 0 ? `${pendingTriggerCount} action${pendingTriggerCount > 1 ? 's' : ''} déclencheur${pendingTriggerCount > 1 ? 's' : ''}` : 'Historique déclencheurs'}
               </button>
             )}
             {pendingCount > 0 && (
@@ -806,8 +911,10 @@ export function MonitoringPage() {
         </div>
       )}
 
-      {/* Matrix or Params tab */}
-      {activeKind === 'params' ? (
+      {/* Matrix or Params tab or Cleaning */}
+      {activeKind === 'cleaning' ? (
+        <CleaningTab containers={containers} />
+      ) : activeKind === 'params' ? (
         <ParamMatrixTab containers={containers} />
       ) : (
         <>

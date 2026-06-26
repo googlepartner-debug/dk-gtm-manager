@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type {
   GTMAccount, GTMContainer, DeploymentPackage, DeploymentRecord, DeploymentResult,
-  ContainerDiff, DiffEntity, GlobalDiffSummary, RenameOperation, TriggerOperation,
+  ContainerDiff, DiffEntity, GlobalDiffSummary, RenameOperation, TriggerOperation, DeletionOperation,
 } from '../types/gtm';
 import { STATIC_ACCOUNTS, STATIC_CONTAINERS } from '../data/gtm-static';
 import {
@@ -48,6 +48,9 @@ interface GTMStore {
   // Trigger operations queue
   pendingTriggerOps: TriggerOperation[];
 
+  // Deletion queue
+  pendingDeletions: DeletionOperation[];
+
   // Actions — containers
   fetchAccounts: (token?: string) => Promise<void>;
   selectAccount: (accountId: string, token?: string) => Promise<void>;
@@ -83,7 +86,14 @@ interface GTMStore {
   // Actions — trigger ops
   addTriggerOp: (op: Omit<TriggerOperation, 'id' | 'status' | 'createdAt'>) => void;
   removeTriggerOp: (id: string) => void;
+  cancelTriggerOp: (id: string) => void;
   clearTriggerOps: () => void;
+
+  // Actions — deletions
+  addDeletions: (ops: Omit<DeletionOperation, 'id' | 'status' | 'createdAt'>[]) => void;
+  cancelDeletion: (id: string) => void;
+  removeDeletion: (id: string) => void;
+  clearDeletions: () => void;
 }
 
 export const useGTMStore = create<GTMStore>((set, get) => ({
@@ -111,6 +121,7 @@ export const useGTMStore = create<GTMStore>((set, get) => ({
 
   pendingRenames: [],
   pendingTriggerOps: [],
+  pendingDeletions: [],
 
   // ─── Accounts & containers ──────────────────────────────────────────────────
 
@@ -444,5 +455,34 @@ export const useGTMStore = create<GTMStore>((set, get) => ({
   removeTriggerOp: (id) =>
     set((state) => ({ pendingTriggerOps: state.pendingTriggerOps.filter((op) => op.id !== id) })),
 
+  cancelTriggerOp: (id) =>
+    set((state) => ({
+      pendingTriggerOps: state.pendingTriggerOps.map((op) =>
+        op.id === id ? { ...op, status: 'cancelled' as const } : op,
+      ),
+    })),
+
   clearTriggerOps: () => set({ pendingTriggerOps: [] }),
+
+  addDeletions: (ops) => {
+    const newOps: DeletionOperation[] = ops.map((op) => ({
+      ...op,
+      id: crypto.randomUUID(),
+      status: 'pending',
+      createdAt: new Date().toISOString(),
+    }));
+    set((state) => ({ pendingDeletions: [...state.pendingDeletions, ...newOps] }));
+  },
+
+  cancelDeletion: (id) =>
+    set((state) => ({
+      pendingDeletions: state.pendingDeletions.map((op) =>
+        op.id === id ? { ...op, status: 'cancelled' as const } : op,
+      ),
+    })),
+
+  removeDeletion: (id) =>
+    set((state) => ({ pendingDeletions: state.pendingDeletions.filter((op) => op.id !== id) })),
+
+  clearDeletions: () => set({ pendingDeletions: [] }),
 }));
