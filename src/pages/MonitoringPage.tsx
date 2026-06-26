@@ -3,7 +3,7 @@ import { clsx } from 'clsx';
 import { MONITORING_MOCK, type MonitoringContainerData } from '../data/monitoring-mock';
 import { RenameDrawer, type ContainerOption } from '../components/monitoring/RenameDrawer';
 import { VariableContentDrawer } from '../components/monitoring/VariableContentDrawer';
-import { TagDetailDrawer } from '../components/monitoring/TagDetailDrawer';
+import { TagDrawer } from '../components/monitoring/TagDrawer';
 import { ParamMatrixTab } from '../components/monitoring/ParamMatrixTab';
 import { useGTMStore } from '../store/gtm-store';
 import type { GTMTag, GTMTrigger, GTMVariable } from '../types/gtm';
@@ -463,7 +463,7 @@ export function MonitoringPage() {
   const [search, setSearch] = useState('');
   const [renameRow, setRenameRow] = useState<MatrixRow | null>(null);
   const [contentRow, setContentRow] = useState<MatrixRow | null>(null);
-  const [tagDetailRow, setTagDetailRow] = useState<MatrixRow | null>(null);
+  const [tagRow, setTagRow] = useState<MatrixRow | null>(null);
   const [showPlan, setShowPlan] = useState(false);
 
   const containers: MonitoringContainerData[] = MONITORING_MOCK;
@@ -504,17 +504,11 @@ export function MonitoringPage() {
   function handleRowClick(row: MatrixRow) {
     setShowPlan(false);
     if (activeKind === 'variables') {
-      setContentRow(row);
-      setRenameRow(null);
-      setTagDetailRow(null);
+      setContentRow(row); setRenameRow(null); setTagRow(null);
     } else if (activeKind === 'tags') {
-      setTagDetailRow(row);
-      setRenameRow(null);
-      setContentRow(null);
+      setTagRow(row); setRenameRow(null); setContentRow(null);
     } else {
-      setRenameRow(row);
-      setContentRow(null);
-      setTagDetailRow(null);
+      setRenameRow(row); setContentRow(null); setTagRow(null);
     }
   }
 
@@ -690,16 +684,17 @@ export function MonitoringPage() {
         </>
       )}
 
-      {/* Tag Detail Drawer */}
-      {tagDetailRow && (
-        <TagDetailDrawer
-          rowKey={tagDetailRow.key}
-          category={tagDetailRow.category}
-          categoryColor={getCategoryConfig('tags', tagDetailRow.category).color}
-          cells={tagDetailRow.cells}
+      {/* Tag Drawer (Déclencheurs + Renommer) */}
+      {tagRow && (
+        <TagDrawer
+          rowKey={tagRow.key}
+          category={tagRow.category}
+          categoryColor={getCategoryConfig('tags', tagRow.category).color}
+          cells={tagRow.cells}
           containers={containers}
-          onClose={() => setTagDetailRow(null)}
-          onRename={() => { setRenameRow(tagDetailRow); setTagDetailRow(null); }}
+          existingRenames={pendingRenames.filter((r) => r.rowKey === tagRow.key && r.category === tagRow.category)}
+          onSave={(ops) => addRenames(ops)}
+          onClose={() => setTagRow(null)}
         />
       )}
 
