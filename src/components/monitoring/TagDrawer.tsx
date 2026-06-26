@@ -111,12 +111,14 @@ function TriggersTab({
   pendingTriggerOps,
   tagRowKey,
   onRemove,
+  onCancelOp,
 }: {
   infos: ContainerTriggerInfo[];
   consistent: boolean;
   pendingTriggerOps: import('../../types/gtm').TriggerOperation[];
   tagRowKey: string;
   onRemove: (containerId: string, containerName: string, publicId: string, trigger: TriggerEntry, isLast: boolean) => void;
+  onCancelOp: (opId: string) => void;
 }) {
   return (
     <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
@@ -165,7 +167,7 @@ function TriggersTab({
                     const label = TRIGGER_TYPE_LABELS[tr.type] ?? tr.type;
                     const isPageview = tr.type === 'pageview';
                     const isLast = info.triggers.length === 1;
-                    const alreadyQueued = pendingTriggerOps.some(
+                    const queuedOp = pendingTriggerOps.find(
                       (op) =>
                         op.kind === 'remove' &&
                         op.tagRowKey === tagRowKey &&
@@ -190,10 +192,15 @@ function TriggersTab({
                             Toutes les pages
                           </span>
                         )}
-                        {alreadyQueued ? (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded shrink-0" style={{ backgroundColor: 'hsl(46 100% 50% / 0.15)', color: 'hsl(35 90% 40%)' }}>
-                            Planifié
-                          </span>
+                        {queuedOp ? (
+                          <button
+                            onClick={() => onCancelOp(queuedOp.id)}
+                            className="text-[10px] px-1.5 py-0.5 rounded shrink-0 transition-opacity hover:opacity-70"
+                            style={{ backgroundColor: 'hsl(46 100% 50% / 0.15)', color: 'hsl(35 90% 40%)' }}
+                            title="Annuler ce retrait"
+                          >
+                            Planifié ×
+                          </button>
                         ) : tr.triggerId ? (
                           <button
                             onClick={() => onRemove(info.containerId, info.containerName, info.publicId, tr, isLast)}
@@ -397,7 +404,7 @@ export function TagDrawer({
 }: TagDrawerProps) {
   const [activeTab, setActiveTab] = useState<DrawerTab>(initialTab);
   const [removeConfirm, setRemoveConfirm] = useState<RemoveConfirm | null>(null);
-  const { pendingTriggerOps, addTriggerOp } = useGTMStore();
+  const { pendingTriggerOps, addTriggerOp, removeTriggerOp } = useGTMStore();
 
   const triggerInfos = useMemo(() => buildTriggerInfo(containers, cells), [containers, cells]);
   const consistent = triggersConsistent(triggerInfos);
@@ -506,6 +513,7 @@ export function TagDrawer({
             pendingTriggerOps={pendingTriggerOps}
             tagRowKey={rowKey}
             onRemove={handleRemove}
+            onCancelOp={removeTriggerOp}
           />
         ) : (
           <RenameTab

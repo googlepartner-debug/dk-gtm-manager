@@ -492,6 +492,97 @@ function RenamePlanPanel({ onClose }: { onClose: () => void }) {
   );
 }
 
+// ─── Trigger ops panel ────────────────────────────────────────────────────────
+
+function TriggerOpsPlanPanel({ onClose }: { onClose: () => void }) {
+  const { pendingTriggerOps, removeTriggerOp, clearTriggerOps } = useGTMStore();
+  const pending = pendingTriggerOps.filter((op) => op.status === 'pending');
+
+  return (
+    <>
+      <div className="fixed inset-0 z-40" style={{ backgroundColor: 'hsl(220 13% 10% / 0.35)' }} onClick={onClose} />
+      <div className="fixed right-0 top-0 h-full z-50 flex flex-col shadow-2xl" style={{ width: '440px', backgroundColor: 'white', borderLeft: '1px solid hsl(220 13% 91%)' }}>
+        <div className="px-5 py-4 border-b flex items-center justify-between" style={{ borderColor: 'hsl(220 13% 91%)' }}>
+          <div>
+            <h2 className="text-sm font-semibold text-foreground">Actions déclencheurs</h2>
+            <p className="text-xs text-muted-fg mt-0.5">{pending.length} opération{pending.length > 1 ? 's' : ''} planifiée{pending.length > 1 ? 's' : ''}</p>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-card transition-colors text-muted-fg">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 2l10 10M12 2L2 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-2">
+          {pending.map((op) => (
+            <div key={op.id} className="flex items-start gap-3 px-3 py-2.5 rounded-lg border" style={{ borderColor: 'hsl(220 13% 91%)' }}>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <span
+                    className="px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider shrink-0"
+                    style={{ backgroundColor: op.kind === 'remove' ? 'hsl(0 85% 97%)' : 'hsl(142 72% 95%)', color: op.kind === 'remove' ? 'hsl(0 70% 50%)' : 'hsl(142 60% 28%)' }}
+                  >
+                    {op.kind === 'remove' ? 'Retrait' : 'Sync'}
+                  </span>
+                  <span className="text-xs font-medium text-foreground truncate">{op.tagRowKey}</span>
+                  <span className="text-[10px] text-muted-fg shrink-0">{op.tagCategory}</span>
+                </div>
+                {op.triggerName && (
+                  <p className="text-[11px] font-mono mb-1" style={{ color: 'hsl(220 13% 35%)' }}>
+                    Retirer : {op.triggerName}
+                  </p>
+                )}
+                <div className="space-y-0.5">
+                  {op.steps.map((step, i) => (
+                    <div key={i} className="flex items-center gap-1.5 text-[10px]" style={{ color: 'hsl(220 13% 50%)' }}>
+                      <svg width="8" height="8" viewBox="0 0 8 8" fill="none" className="shrink-0"><circle cx="4" cy="4" r="3" stroke="currentColor" strokeWidth="1"/></svg>
+                      <span className="font-medium">{step.containerName}</span>
+                      <span className="font-mono">{step.publicId}</span>
+                      {step.unlink && step.unlink.length > 0 && (
+                        <span style={{ color: 'hsl(0 65% 50%)' }}>− {step.unlink.length} lien{step.unlink.length > 1 ? 's' : ''}</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <button
+                onClick={() => removeTriggerOp(op.id)}
+                className="p-1 rounded hover:bg-card text-muted-fg hover:text-foreground transition-colors shrink-0 mt-0.5"
+                title="Annuler cette opération"
+              >
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round"/></svg>
+              </button>
+            </div>
+          ))}
+        </div>
+
+        <div className="px-5 py-4 border-t space-y-2" style={{ borderColor: 'hsl(220 13% 91%)' }}>
+          <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg text-xs" style={{ backgroundColor: 'hsl(0 70% 50% / 0.07)', color: 'hsl(0 65% 45%)' }}>
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="shrink-0 mt-0.5"><circle cx="6" cy="6" r="5" stroke="currentColor" strokeWidth="1"/><path d="M6 4v2.5M6 8v.25" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round"/></svg>
+            Sera exécuté via l'API GTM après configuration GCP OAuth.
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => { clearTriggerOps(); onClose(); }}
+              className="flex-1 px-4 py-2 text-xs rounded-lg border transition-colors text-muted-fg hover:text-foreground"
+              style={{ borderColor: 'hsl(220 13% 85%)' }}
+            >
+              Tout effacer
+            </button>
+            <button
+              disabled
+              className="flex-1 px-4 py-2 text-xs font-medium rounded-lg text-white opacity-40 cursor-not-allowed"
+              style={{ backgroundColor: 'hsl(0 70% 50%)' }}
+              title="Nécessite GCP OAuth"
+            >
+              Appliquer (OAuth requis)
+            </button>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
 // ─── Main page ─────────────────────────────────────────────────────────────────
 
 const KIND_LABELS: Record<EntityKind, string> = {
@@ -510,6 +601,7 @@ export function MonitoringPage() {
   const [contentRow, setContentRow] = useState<MatrixRow | null>(null);
   const [tagRow, setTagRow] = useState<MatrixRow | null>(null);
   const [showPlan, setShowPlan] = useState(false);
+  const [showTriggerOps, setShowTriggerOps] = useState(false);
 
   const containers: MonitoringContainerData[] = MONITORING_MOCK;
   const containerIds = containers.map((c) => c.containerId);
@@ -591,6 +683,7 @@ export function MonitoringPage() {
           <div className="flex items-center gap-2">
             {pendingTriggerCount > 0 && (
               <button
+                onClick={() => setShowTriggerOps(true)}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:opacity-80"
                 style={{ backgroundColor: 'hsl(0 70% 50% / 0.1)', color: 'hsl(0 65% 45%)' }}
               >
@@ -783,6 +876,9 @@ export function MonitoringPage() {
 
       {/* Rename Plan Panel */}
       {showPlan && <RenamePlanPanel onClose={() => setShowPlan(false)} />}
+
+      {/* Trigger Ops Panel */}
+      {showTriggerOps && <TriggerOpsPlanPanel onClose={() => setShowTriggerOps(false)} />}
     </div>
   );
 }
