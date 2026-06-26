@@ -502,7 +502,7 @@ const KIND_LABELS: Record<EntityKind, string> = {
 };
 
 export function MonitoringPage() {
-  const { pendingRenames, addRenames } = useGTMStore();
+  const { pendingRenames, addRenames, pendingTriggerOps } = useGTMStore();
   const [activeKind, setActiveKind] = useState<EntityKind>('tags');
   const [activeCategory, setActiveCategory] = useState<string>('Tous');
   const [search, setSearch] = useState('');
@@ -536,6 +536,7 @@ export function MonitoringPage() {
 
   const stats = useMemo(() => coverageStats(rows, containerIds), [rows, containerIds]);
   const pendingCount = pendingRenames.filter((r) => r.status === 'pending').length;
+  const pendingTriggerCount = pendingTriggerOps.filter((op) => op.status === 'pending').length;
 
   function buildContainerOptions(row: MatrixRow): ContainerOption[] {
     return containers.map((c) => ({
@@ -588,6 +589,15 @@ export function MonitoringPage() {
             <p className="text-xs text-muted-fg mt-0.5">Visualisez la présence de chaque entité · cliquez une ligne pour renommer</p>
           </div>
           <div className="flex items-center gap-2">
+            {pendingTriggerCount > 0 && (
+              <button
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:opacity-80"
+                style={{ backgroundColor: 'hsl(0 70% 50% / 0.1)', color: 'hsl(0 65% 45%)' }}
+              >
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M5 1v4M5 7v.5" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round"/><circle cx="5" cy="5" r="4" stroke="currentColor" strokeWidth="1"/></svg>
+                {pendingTriggerCount} action{pendingTriggerCount > 1 ? 's' : ''} déclencheur{pendingTriggerCount > 1 ? 's' : ''}
+              </button>
+            )}
             {pendingCount > 0 && (
               <button
                 onClick={() => setShowPlan(true)}

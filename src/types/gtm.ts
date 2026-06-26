@@ -137,6 +137,34 @@ export interface GlobalDiffSummary {
   selectedCount: number;
 }
 
+// ─── Trigger operations queue ─────────────────────────────────────────────────
+
+export type TriggerOpKind = 'remove' | 'sync';
+
+export interface TriggerOpStep {
+  containerId: string;
+  containerName: string;
+  publicId: string;
+  unlink?: string[];          // trigger IDs to remove from tag's firingTriggerId
+  linkExisting?: string[];    // trigger IDs to add (already exist in container)
+  createAndLink?: GTMTrigger[]; // triggers to create then link
+}
+
+export interface TriggerOperation {
+  id: string;
+  kind: TriggerOpKind;
+  tagRowKey: string;
+  tagCategory: string;
+  triggerName?: string;
+  triggerSemanticKey?: string;
+  referenceContainerId?: string;
+  referenceContainerName?: string;
+  steps: TriggerOpStep[];
+  status: 'pending' | 'applied' | 'failed';
+  createdAt: string;
+  error?: string;
+}
+
 // ─── Rename queue ──────────────────────────────────────────────────────────────
 
 export interface RenameOperation {

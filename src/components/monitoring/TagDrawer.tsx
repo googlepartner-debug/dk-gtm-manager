@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { clsx } from 'clsx';
 import type { MonitoringContainerData } from '../../data/monitoring-mock';
 import type { RenameOperation, GTMTrigger } from '../../types/gtm';
+import { useGTMStore } from '../../store/gtm-store';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -11,6 +12,14 @@ interface TriggerEntry {
   name: string;
   type: string;
   semanticKey: string;
+  triggerId?: string;
+}
+
+interface RemoveConfirm {
+  containerId: string;
+  containerName: string;
+  publicId: string;
+  trigger: TriggerEntry;
 }
 
 // ─── Semantic key ──────────────────────────────────────────────────────────────
@@ -81,7 +90,7 @@ function buildTriggerInfo(
     const triggerMap = new Map(c.triggers.filter((tr) => tr.triggerId).map((tr) => [tr.triggerId!, tr]));
     const triggers: TriggerEntry[] = (tag.firingTriggerId ?? []).flatMap((id) => {
       const tr = triggerMap.get(id);
-      return tr ? [{ name: tr.name, type: tr.type, semanticKey: triggerSemanticKey(tr) }] : [];
+      return tr ? [{ name: tr.name, type: tr.type, semanticKey: triggerSemanticKey(tr), triggerId: tr.triggerId }] : [];
     });
     return { containerId: c.containerId, containerName: c.containerName, publicId: c.publicId, tagPresent: true, tagName: tag.name, triggers };
   });
@@ -96,7 +105,19 @@ function triggersConsistent(infos: ContainerTriggerInfo[]): boolean {
 
 // ─── Triggers tab ──────────────────────────────────────────────────────────────
 
-function TriggersTab({ infos, consistent }: { infos: ContainerTriggerInfo[]; consistent: boolean }) {
+function TriggersTab({
+  infos,
+  consistent,
+  pendingTriggerOps,
+  tagRowKey,
+  onRemove,
+}: {
+  infos: ContainerTriggerInfo[];
+  consistent: boolean;
+  pendingTriggerOps: import('../../types/gtm').TriggerOperation[];
+  tagRowKey: string;
+  onRemove: (containerId: string, containerName: string, publicId: string, trigger: TriggerEntry, isLast: boolean) => void;
+}) {
   return (
     <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
       {infos.map((info) => {
@@ -143,8 +164,15 @@ function TriggersTab({ infos, consistent }: { infos: ContainerTriggerInfo[]; con
                   {info.triggers.map((tr, i) => {
                     const label = TRIGGER_TYPE_LABELS[tr.type] ?? tr.type;
                     const isPageview = tr.type === 'pageview';
+                    const isLast = info.triggers.length === 1;
+                    const alreadyQueued = pendingTriggerOps.some(
+                      (op) =>
+                        op.kind === 'remove' &&
+                        op.tagRowKey === tagRowKey &&
+                        op.steps.some((s) => s.containerId === info.containerId && s.unlink?.includes(tr.triggerId ?? '')),
+                    );
                     return (
-                      <div key={i} className="flex items-center gap-2">
+                      <div key={i} className="group flex items-center gap-2">
                         <span
                           className="px-1.5 py-0.5 rounded text-[9px] font-semibold uppercase tracking-wider shrink-0"
                           style={{
@@ -154,14 +182,28 @@ function TriggersTab({ infos, consistent }: { infos: ContainerTriggerInfo[]; con
                         >
                           {label}
                         </span>
-                        <span className="text-[11px] font-mono" style={{ color: isPageview ? 'hsl(0 70% 45%)' : 'hsl(220 13% 20%)' }}>
+                        <span className="text-[11px] font-mono flex-1" style={{ color: isPageview ? 'hsl(0 70% 45%)' : 'hsl(220 13% 20%)' }}>
                           {tr.name}
                         </span>
                         {isPageview && (
-                          <span className="text-[10px] font-medium px-1 py-0.5 rounded" style={{ backgroundColor: 'hsl(0 85% 96%)', color: 'hsl(0 70% 45%)' }}>
+                          <span className="text-[10px] font-medium px-1 py-0.5 rounded shrink-0" style={{ backgroundColor: 'hsl(0 85% 96%)', color: 'hsl(0 70% 45%)' }}>
                             Toutes les pages
                           </span>
                         )}
+                        {alreadyQueued ? (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded shrink-0" style={{ backgroundColor: 'hsl(46 100% 50% / 0.15)', color: 'hsl(35 90% 40%)' }}>
+                            Planifié
+                          </span>
+                        ) : tr.triggerId ? (
+                          <button
+                            onClick={() => onRemove(info.containerId, info.containerName, info.publicId, tr, isLast)}
+                            className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium hover:opacity-100"
+                            style={{ backgroundColor: 'hsl(0 85% 97%)', color: 'hsl(0 70% 50%)' }}
+                            title="Retirer ce déclencheur du tag"
+                          >
+                            Retirer
+                          </button>
+                        ) : null}
                       </div>
                     );
                   })}
@@ -354,11 +396,34 @@ export function TagDrawer({
   onClose,
 }: TagDrawerProps) {
   const [activeTab, setActiveTab] = useState<DrawerTab>(initialTab);
+  const [removeConfirm, setRemoveConfirm] = useState<RemoveConfirm | null>(null);
+  const { pendingTriggerOps, addTriggerOp } = useGTMStore();
 
   const triggerInfos = useMemo(() => buildTriggerInfo(containers, cells), [containers, cells]);
   const consistent = triggersConsistent(triggerInfos);
   const presentCount = triggerInfos.filter((i) => i.tagPresent).length;
   const absentCount = triggerInfos.filter((i) => !i.tagPresent).length;
+
+  function queueRemoval(containerId: string, containerName: string, publicId: string, trigger: TriggerEntry) {
+    if (!trigger.triggerId) return;
+    addTriggerOp({
+      kind: 'remove',
+      tagRowKey: rowKey,
+      tagCategory: category,
+      triggerName: trigger.name,
+      triggerSemanticKey: trigger.semanticKey,
+      steps: [{ containerId, containerName, publicId, unlink: [trigger.triggerId] }],
+    });
+    setRemoveConfirm(null);
+  }
+
+  function handleRemove(containerId: string, containerName: string, publicId: string, trigger: TriggerEntry, isLast: boolean) {
+    if (isLast) {
+      setRemoveConfirm({ containerId, containerName, publicId, trigger });
+    } else {
+      queueRemoval(containerId, containerName, publicId, trigger);
+    }
+  }
 
   const options: ContainerOption[] = containers.map((c) => ({
     containerId: c.containerId,
@@ -376,7 +441,7 @@ export function TagDrawer({
     <>
       <div className="fixed inset-0 z-40" style={{ backgroundColor: 'hsl(220 13% 10% / 0.35)' }} onClick={onClose} />
 
-      <div className="fixed right-0 top-0 h-full z-50 flex flex-col shadow-2xl" style={{ width: '520px', backgroundColor: 'white', borderLeft: '1px solid hsl(220 13% 91%)' }}>
+      <div className="fixed right-0 top-0 h-full z-50 flex flex-col shadow-2xl overflow-hidden" style={{ width: '520px', backgroundColor: 'white', borderLeft: '1px solid hsl(220 13% 91%)', position: 'relative' }}>
         {/* Header */}
         <div className="px-5 pt-4 pb-0 border-b shrink-0" style={{ borderColor: 'hsl(220 13% 91%)' }}>
           <div className="flex items-start justify-between mb-3">
@@ -435,7 +500,13 @@ export function TagDrawer({
 
         {/* Tab content */}
         {activeTab === 'triggers' ? (
-          <TriggersTab infos={triggerInfos} consistent={consistent} />
+          <TriggersTab
+            infos={triggerInfos}
+            consistent={consistent}
+            pendingTriggerOps={pendingTriggerOps}
+            tagRowKey={rowKey}
+            onRemove={handleRemove}
+          />
         ) : (
           <RenameTab
             rowKey={rowKey}
@@ -446,6 +517,41 @@ export function TagDrawer({
             onSave={onSave}
             onClose={onClose}
           />
+        )}
+
+        {/* Confirmation — dernier déclencheur */}
+        {removeConfirm && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center" style={{ backgroundColor: 'hsl(220 13% 10% / 0.5)' }}>
+            <div className="mx-5 rounded-xl border shadow-xl p-5 max-w-sm w-full" style={{ backgroundColor: 'white', borderColor: 'hsl(220 13% 88%)' }}>
+              <div className="flex items-start gap-3 mb-4">
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: 'hsl(0 85% 97%)' }}>
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 2v4.5M7 9v.5" stroke="hsl(0 70% 50%)" strokeWidth="1.5" strokeLinecap="round"/><circle cx="7" cy="7" r="6" stroke="hsl(0 70% 50%)" strokeWidth="1.25"/></svg>
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-foreground">Dernier déclencheur</p>
+                  <p className="text-xs text-muted-fg mt-0.5">
+                    Retirer <span className="font-mono font-medium" style={{ color: 'hsl(220 13% 20%)' }}>{removeConfirm.trigger.name}</span> désactivera le tag dans <span className="font-medium">{removeConfirm.containerName}</span> — il ne se déclenchera plus.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setRemoveConfirm(null)}
+                  className="flex-1 px-3 py-2 text-xs rounded-lg border transition-colors text-muted-fg hover:text-foreground"
+                  style={{ borderColor: 'hsl(220 13% 85%)' }}
+                >
+                  Annuler
+                </button>
+                <button
+                  onClick={() => queueRemoval(removeConfirm.containerId, removeConfirm.containerName, removeConfirm.publicId, removeConfirm.trigger)}
+                  className="flex-1 px-3 py-2 text-xs font-medium rounded-lg text-white transition-colors hover:opacity-90"
+                  style={{ backgroundColor: 'hsl(0 70% 50%)' }}
+                >
+                  Confirmer le retrait
+                </button>
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </>

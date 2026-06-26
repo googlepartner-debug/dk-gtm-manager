@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type {
   GTMAccount, GTMContainer, DeploymentPackage, DeploymentRecord, DeploymentResult,
-  ContainerDiff, DiffEntity, GlobalDiffSummary, RenameOperation,
+  ContainerDiff, DiffEntity, GlobalDiffSummary, RenameOperation, TriggerOperation,
 } from '../types/gtm';
 import { STATIC_ACCOUNTS, STATIC_CONTAINERS } from '../data/gtm-static';
 import {
@@ -45,6 +45,9 @@ interface GTMStore {
   // Rename queue
   pendingRenames: RenameOperation[];
 
+  // Trigger operations queue
+  pendingTriggerOps: TriggerOperation[];
+
   // Actions — containers
   fetchAccounts: (token?: string) => Promise<void>;
   selectAccount: (accountId: string, token?: string) => Promise<void>;
@@ -76,6 +79,11 @@ interface GTMStore {
   addRenames: (ops: Omit<RenameOperation, 'id' | 'status' | 'createdAt'>[]) => void;
   removeRename: (id: string) => void;
   clearRenames: () => void;
+
+  // Actions — trigger ops
+  addTriggerOp: (op: Omit<TriggerOperation, 'id' | 'status' | 'createdAt'>) => void;
+  removeTriggerOp: (id: string) => void;
+  clearTriggerOps: () => void;
 }
 
 export const useGTMStore = create<GTMStore>((set, get) => ({
@@ -102,6 +110,7 @@ export const useGTMStore = create<GTMStore>((set, get) => ({
   history: loadHistory(),
 
   pendingRenames: [],
+  pendingTriggerOps: [],
 
   // ─── Accounts & containers ──────────────────────────────────────────────────
 
@@ -421,4 +430,19 @@ export const useGTMStore = create<GTMStore>((set, get) => ({
     set((state) => ({ pendingRenames: state.pendingRenames.filter((r) => r.id !== id) })),
 
   clearRenames: () => set({ pendingRenames: [] }),
+
+  addTriggerOp: (op) => {
+    const newOp: TriggerOperation = {
+      ...op,
+      id: crypto.randomUUID(),
+      status: 'pending',
+      createdAt: new Date().toISOString(),
+    };
+    set((state) => ({ pendingTriggerOps: [...state.pendingTriggerOps, newOp] }));
+  },
+
+  removeTriggerOp: (id) =>
+    set((state) => ({ pendingTriggerOps: state.pendingTriggerOps.filter((op) => op.id !== id) })),
+
+  clearTriggerOps: () => set({ pendingTriggerOps: [] }),
 }));
