@@ -68,6 +68,8 @@ const TK_TRIGGERS: GTMTrigger[] = [
   { name: 'Click - CTA Réservation', type: 'click', filter: [{ type: 'contains', parameter: [{ type: 'template', key: 'arg0', value: '{{Click Classes}}' }, { type: 'template', key: 'arg1', value: 'btn-book' }] }] },
 ];
 
+const JS_ITEMS_WITH_COUNTRY = 'function() {\n  var dl = window.dataLayer || [];\n  var ecom = dl.slice().reverse().find(function(d) { return d.ecommerce; });\n  if (!ecom) return [];\n  return (ecom.ecommerce.items || []).map(function(item) {\n    return {\n      item_id:       item.item_id || item.id,\n      item_name:     item.item_name || item.name,\n      item_brand:    item.item_brand    || \'\',\n      item_category: item.item_category || \'\',\n      item_country:  item.item_country  || \'\',\n      price:         parseFloat(item.price)      || 0,\n      quantity:      parseInt(item.quantity, 10) || 1\n    };\n  });\n}';
+
 const TK_VARIABLES: GTMVariable[] = [
   { name: 'DLV - ecommerce', type: 'v', parameter: [{ type: 'template', key: 'name', value: 'ecommerce' }] },
   { name: 'DLV - event', type: 'v', parameter: [{ type: 'template', key: 'name', value: 'event' }] },
@@ -76,6 +78,8 @@ const TK_VARIABLES: GTMVariable[] = [
   { name: 'DLV - user_id', type: 'v', parameter: [{ type: 'template', key: 'name', value: 'user_id' }] },
   { name: 'DLV - page_type', type: 'v', parameter: [{ type: 'template', key: 'name', value: 'page_type' }] },
   { name: 'URL - full', type: 'u', parameter: [{ type: 'template', key: 'component', value: 'URL' }] },
+  { name: 'JS - ecommerce.items', type: 'jsm', parameter: [{ type: 'template', key: 'javascript', value: JS_ITEMS_WITH_COUNTRY }] },
+  { name: 'JS - page_path_clean', type: 'jsm', parameter: [{ type: 'template', key: 'javascript', value: "function() {\n  return window.location.pathname.replace(/\\/$/, '') || '/';\n}" }] },
 ];
 
 // ─── Air France ────────────────────────────────────────────────────────────────
@@ -196,12 +200,15 @@ const COR_TRIGGERS: GTMTrigger[] = [
   { name: 'Scroll 50%', type: 'scrollDepth', parameter: [{ type: 'template', key: 'verticalThresholdPercents', value: '50' }] },
 ];
 
+const JS_ITEMS_NO_COUNTRY = "function() {\n  var ecom = {{DLV - ecommerce}};\n  if (!ecom || !ecom.items) return [];\n  return ecom.items.map(function(item) {\n    return {\n      item_id:       item.item_id,\n      item_name:     item.item_name,\n      item_brand:    item.item_brand    || '',\n      item_category: item.item_category || '',\n      price:         item.price,\n      quantity:      item.quantity || 1\n    };\n  });\n}";
+
 const COR_VARIABLES: GTMVariable[] = [
   { name: 'DLV - ecommerce', type: 'v', parameter: [{ type: 'template', key: 'name', value: 'ecommerce' }] },
   { name: 'DLV - event', type: 'v', parameter: [{ type: 'template', key: 'name', value: 'event' }] },
   { name: 'Var - GA4 ID', type: 'c', parameter: [{ type: 'template', key: 'value', value: 'G-XXXXXXX003' }] },
   { name: 'DLV - user_id', type: 'v', parameter: [{ type: 'template', key: 'name', value: 'user_id' }] },
   { name: 'JS - currency', type: 'jsm', parameter: [{ type: 'template', key: 'javascript', value: 'function(){ return "EUR"; }' }] },
+  { name: 'JS - ecommerce.items', type: 'jsm', parameter: [{ type: 'template', key: 'javascript', value: JS_ITEMS_NO_COUNTRY }] },
   { name: 'URL - full', type: 'u', parameter: [{ type: 'template', key: 'component', value: 'URL' }] },
   { name: 'URL - path', type: 'u', parameter: [{ type: 'template', key: 'component', value: 'PATH' }] },
 ];
@@ -354,6 +361,9 @@ const SWI_VARIABLES: GTMVariable[] = [
   { name: 'URL - full', type: 'u', parameter: [{ type: 'template', key: 'component', value: 'URL' }] },
   { name: 'URL - path', type: 'u', parameter: [{ type: 'template', key: 'component', value: 'PATH' }] },
   { name: 'Cookie - session', type: 'k', parameter: [{ type: 'template', key: 'cookieName', value: 'swi_session' }] },
+  // Same JS code as TK — will show green in content comparison
+  { name: 'JS - ecommerce.items', type: 'jsm', parameter: [{ type: 'template', key: 'javascript', value: JS_ITEMS_WITH_COUNTRY }] },
+  { name: 'JS - page_path_clean', type: 'jsm', parameter: [{ type: 'template', key: 'javascript', value: "function() {\n  return window.location.pathname.replace(/\\/$/, '') || '/';\n}" }] },
 ];
 
 // ─── Final export ──────────────────────────────────────────────────────────────

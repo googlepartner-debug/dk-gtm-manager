@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { clsx } from 'clsx';
 import { MONITORING_MOCK, type MonitoringContainerData } from '../data/monitoring-mock';
 import { RenameDrawer, type ContainerOption } from '../components/monitoring/RenameDrawer';
+import { VariableContentDrawer } from '../components/monitoring/VariableContentDrawer';
 import { ParamMatrixTab } from '../components/monitoring/ParamMatrixTab';
 import { useGTMStore } from '../store/gtm-store';
 import type { GTMTag, GTMTrigger, GTMVariable } from '../types/gtm';
@@ -459,7 +460,8 @@ export function MonitoringPage() {
   const [activeKind, setActiveKind] = useState<EntityKind>('tags');
   const [activeCategory, setActiveCategory] = useState<string>('Tous');
   const [search, setSearch] = useState('');
-  const [selectedRow, setSelectedRow] = useState<MatrixRow | null>(null);
+  const [renameRow, setRenameRow] = useState<MatrixRow | null>(null);
+  const [contentRow, setContentRow] = useState<MatrixRow | null>(null);
   const [showPlan, setShowPlan] = useState(false);
 
   const containers: MonitoringContainerData[] = MONITORING_MOCK;
@@ -497,9 +499,18 @@ export function MonitoringPage() {
     }));
   }
 
-  const selectedRowConfig = selectedRow
-    ? getCategoryConfig(activeKind, selectedRow.category)
-    : null;
+  function handleRowClick(row: MatrixRow) {
+    setShowPlan(false);
+    if (activeKind === 'variables') {
+      setContentRow(row);
+      setRenameRow(null);
+    } else {
+      setRenameRow(row);
+      setContentRow(null);
+    }
+  }
+
+  const renameRowConfig = renameRow ? getCategoryConfig(activeKind, renameRow.category) : null;
 
   // Per-kind counts for tabs
   const kindCounts = useMemo(() => {
@@ -656,7 +667,7 @@ export function MonitoringPage() {
               rows={rows}
               containers={containers}
               pendingRenames={pendingRenames}
-              onRowClick={(row) => { setSelectedRow(row); setShowPlan(false); }}
+              onRowClick={handleRowClick}
             />
           </div>
           <div
@@ -664,23 +675,38 @@ export function MonitoringPage() {
             style={{ borderColor: 'hsl(220 13% 91%)', backgroundColor: 'hsl(220 20% 98%)', color: 'hsl(220 13% 45%)' }}
           >
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="shrink-0"><circle cx="6" cy="6" r="5" stroke="currentColor" strokeWidth="1"/><path d="M6 4v2.5M6 8v.25" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round"/></svg>
-            Données simulées · cliquez une ligne pour renommer · badge violet = plan de renommage
+            {activeKind === 'variables'
+              ? 'Données simulées · cliquez une ligne pour comparer le contenu · bouton Renommer dans le drawer'
+              : 'Données simulées · cliquez une ligne pour renommer · badge violet = plan de renommage'}
           </div>
         </>
       )}
 
+      {/* Variable Content Drawer */}
+      {contentRow && (
+        <VariableContentDrawer
+          rowKey={contentRow.key}
+          varType={contentRow.category}
+          typeColor={getCategoryConfig('variables', contentRow.category).color}
+          typeLabel={getCategoryConfig('variables', contentRow.category).label}
+          containers={containers}
+          onClose={() => setContentRow(null)}
+          onRename={() => { setRenameRow(contentRow); setContentRow(null); }}
+        />
+      )}
+
       {/* Rename Drawer */}
-      {selectedRow && selectedRowConfig && (
+      {renameRow && renameRowConfig && (
         <RenameDrawer
-          rowKey={selectedRow.key}
-          category={selectedRow.category}
-          categoryColor={selectedRowConfig.color}
-          options={buildContainerOptions(selectedRow)}
+          rowKey={renameRow.key}
+          category={renameRow.category}
+          categoryColor={renameRowConfig.color}
+          options={buildContainerOptions(renameRow)}
           existingRenames={pendingRenames.filter(
-            (r) => r.rowKey === selectedRow.key && r.category === selectedRow.category,
+            (r) => r.rowKey === renameRow.key && r.category === renameRow.category,
           )}
           onSave={(ops) => addRenames(ops)}
-          onClose={() => setSelectedRow(null)}
+          onClose={() => setRenameRow(null)}
         />
       )}
 
