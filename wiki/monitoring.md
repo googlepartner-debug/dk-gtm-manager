@@ -38,7 +38,12 @@ Page `/dashboard/monitoring`. Objectif : visualiser la présence et le contenu d
 - Cards par container : état présent/absent, liste des triggers liés avec type badge + nom
 - Comparaison sémantique : `triggerSemanticKey()` normalise par `type::condition` (customEvent → `customEvent::eventName`, pageview/domReady/windowLoaded → juste le type, click/scroll → `type::filterHash`)
 - Point rouge sur l'onglet si incohérence détectée entre les containers ayant le tag
-- **Action Retirer** : bouton visible au survol de chaque ligne trigger — queues une `TriggerOperation { kind: 'remove' }` dans le store. Badge `Planifié` si déjà en queue. Modal de confirmation si c'est le dernier trigger du tag dans ce container.
+- **Action Retirer** : bouton visible au survol de chaque ligne trigger — queues une `TriggerOperation { kind: 'remove' }` dans le store. Badge `Planifié ×` cliquable pour annuler. Modal de confirmation si c'est le dernier trigger du tag dans ce container.
+- **Action Synchroniser** : bouton "Synchroniser depuis une référence" (visible si incohérence) → vue de planification :
+  - Sélecteur de container de référence avec preview de ses triggers
+  - Aperçu diff par container cible : `−` retirer / `~` lier existant / `+` créer
+  - Checkboxes, bouton "Planifier N synchronisation(s)" → queues `TriggerOperation { kind: 'sync' }`
+- **Feedback visuel** : après planification, le drawer reflète l'état futur en temps réel — triggers barrés "à retirer", lignes vertes "à lier/créer", badge "Sync planifiée" sur la card header
 
 **Onglet Renommer** : formulaire de renommage groupé (identique à l'ancien RenameDrawer).
 
@@ -49,7 +54,7 @@ Page `/dashboard/monitoring`. Objectif : visualiser la présence et le contenu d
 - `tagRowKey` + `tagCategory` : identifient le tag concerné
 - `steps: TriggerOpStep[]` : une étape par container, avec `unlink[]` / `linkExisting[]` / `createAndLink[]`
 - Queue `pendingTriggerOps[]` dans le store — actions : `addTriggerOp`, `removeTriggerOp`, `clearTriggerOps`
-- Bouton dans le header MonitoringPage : "X action(s) déclencheur(s)" (rouge) — futur panneau d'exécution
+- Bouton dans le header MonitoringPage : "X action(s) déclencheur(s)" (orange-rouge) → panneau slide-in listant les ops avec × par opération
 - Exécution (PUT tag via API GTM) bloquée jusqu'à GCP OAuth
 
 ## Renommage groupé

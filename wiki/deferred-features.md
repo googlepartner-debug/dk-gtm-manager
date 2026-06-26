@@ -1,16 +1,10 @@
 # Features différées — DK GTM Manager
 
-## Actions déclencheurs — Synchroniser (action 2 du PRD)
+## Cleaning — variables/triggers non référencés
 
-**Description** : depuis l'onglet Déclencheurs du TagDrawer, aligner les triggers d'un ou plusieurs containers cibles sur ceux d'un container de référence. Mode Remplacer : le cible finit identique à la référence. Détection des triggers sémantiquement équivalents avant création (éviter les doublons).
-**Dépend de** : GCP OAuth pour l'exécution. La planification (queue) peut être développée sans OAuth.
-**État** : PRD v1.1 validé. L'action "Retirer" (action 1) est implémentée. Synchroniser = prochaine étape.
-**Voir** : `PRD_TriggerActions.md` section 2.2.
-
-## Panneau "Actions déclencheurs" dans le header
-
-**Description** : bouton dans le header MonitoringPage (`pendingTriggerOps.length > 0`) qui ouvre un panneau listant les opérations en queue (type, tag, containers impactés, détail des étapes). Boutons : supprimer une opération, tout effacer, appliquer (OAuth requis).
-**État** : bouton badge visible implémenté — panneau slide-in pas encore construit.
+**Description** : outil de nettoyage post-audit pour détecter les variables et triggers GTM qui ne sont utilisés dans aucun tag (triggers) ou aucun tag/trigger (variables). Interface listant les entités orphelines avec possibilité de planifier leur suppression.
+**Dépend de** : GCP OAuth pour l'exécution. Détection fonctionnelle sur mock.
+**État** : demandé, non encore implementé. À placer en onglet Monitoring ou page dédiée `/dashboard/cleaning`.
 
 ## Monitoring live — scan des containers réels
 

@@ -154,3 +154,35 @@ Première action du PRD déployée. Fonctionnement :
 Nouveau type `TriggerOperation` dans `src/types/gtm.ts` avec steps `TriggerOpStep[]` modélisant chaque container impacté (unlink/linkExisting/createAndLink). Actions store : `addTriggerOp`, `removeTriggerOp`, `clearTriggerOps`.
 
 L'exécution réelle (PUT sur le tag via API GTM) reste bloquée jusqu'à GCP OAuth — seule la planification est disponible.
+
+---
+
+## 2026-06-26 (suite 4) — Synchroniser, feedback visuel queue, correctifs
+
+**Action Synchroniser — implémentée**
+
+Deuxième action du PRD déployée depuis l'onglet Déclencheurs du TagDrawer. Accessible via le bouton orange "Synchroniser depuis une référence" (affiché uniquement si incohérence détectée).
+
+Flow : sélecteur de container de référence (radio buttons avec liste de ses triggers) → aperçu par container cible avec diff en trois couleurs :
+- Rouge `−` : trigger à retirer (présent dans le cible, absent de la référence)
+- Bleu `~` : trigger à lier depuis l'existant (équivalent sémantique trouvé dans le container cible)
+- Vert `+` : trigger à créer et lier (aucun équivalent sémantique dans le cible)
+
+Checkboxes par container cible (auto-cochées sur les containers "à synchroniser"). Bouton "Planifier N synchronisation(s)" → queues une `TriggerOperation { kind: 'sync', steps: [...] }` avec toutes les cibles sélectionnées en un seul objet.
+
+**Feedback visuel en temps réel dans le drawer**
+
+Après planification d'une opération (remove ou sync), le drawer reflète immédiatement l'état futur :
+- Retrait planifié : trigger barré, badge rouge "à retirer", opacité réduite — bouton Retirer masqué
+- Sync planifiée : card header passe en orange avec badge "Sync planifiée", triggers à retirer barrés, nouvelles lignes vertes "à lier" / "à créer" ajoutées sous la liste existante
+- Badge `Planifié ×` cliquable pour annuler un retrait individuel
+
+**Panneau "Actions déclencheurs" (slide-in droite)**
+
+Bouton dans le header MonitoringPage (rouge, visible si ops en queue) → drawer liste toutes les `TriggerOperation` pendantes : type (Retrait/Sync), tag, containers impactés avec détail des steps. Bouton × par opération, "Tout effacer", "Appliquer (OAuth requis)" désactivé.
+
+**Correctifs**
+
+- Drawer TagDrawer : `position: relative` dans le style inline écrasait le `fixed` de Tailwind → drawer s'insérais dans le flux DOM au lieu de se superposer. Supprimé.
+- Triggers pageview colorés en rouge pour tous les tags sans exception → remplacé par `isSuspiciousPageview` (rouge uniquement si pageview coexiste avec d'autres triggers dans le même container).
+- `onSync` déclaré dans le type TypeScript de TriggersTab mais absent du destructuring → TypeError à l'appel, page blanche. Corrigé.
