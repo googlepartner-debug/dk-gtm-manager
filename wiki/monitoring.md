@@ -9,7 +9,8 @@ Page `/dashboard/monitoring`. Objectif : visualiser la présence et le contenu d
 - Filtre par catégorie : GA4, Google Ads, Floodlight, Kameleoon, AB Tasty, Meta Pixel, TikTok, Hotjar, HTML Custom
 - Détection de catégorie pour les tags HTML : scan du contenu du paramètre `html`
 - Badge "noms variés" si le même event est tracké sous des noms différents selon les containers
-- Clic sur une ligne → RenameDrawer
+- Badge "déclencheurs variés" si les triggers diffèrent sémantiquement entre containers (comparaison type+conditions, pas les noms)
+- Clic sur une ligne → **TagDrawer** (2 onglets : Déclencheurs + Renommer)
 
 ### Déclencheurs
 - Même matrice, catégorie = `type` GTM (pageview, customEvent, click, scrollDepth…)
@@ -28,6 +29,28 @@ Page `/dashboard/monitoring`. Objectif : visualiser la présence et le contenu d
   - Rouge "Non envoyé" : tag présent dans le container, paramètre absent
   - Gris "Tag absent" : le tag GA4 pour cet event n'existe pas dans ce container
 - Barre de couverture par container (% de paramètres envoyés)
+
+## TagDrawer — onglet Déclencheurs
+
+`TagDrawer` remplace `TagDetailDrawer` + `RenameDrawer` en un seul composant avec deux onglets.
+
+**Onglet Déclencheurs** :
+- Cards par container : état présent/absent, liste des triggers liés avec type badge + nom
+- Comparaison sémantique : `triggerSemanticKey()` normalise par `type::condition` (customEvent → `customEvent::eventName`, pageview/domReady/windowLoaded → juste le type, click/scroll → `type::filterHash`)
+- Point rouge sur l'onglet si incohérence détectée entre les containers ayant le tag
+- **Action Retirer** : bouton visible au survol de chaque ligne trigger — queues une `TriggerOperation { kind: 'remove' }` dans le store. Badge `Planifié` si déjà en queue. Modal de confirmation si c'est le dernier trigger du tag dans ce container.
+
+**Onglet Renommer** : formulaire de renommage groupé (identique à l'ancien RenameDrawer).
+
+## Actions déclencheurs — queue Zustand
+
+`TriggerOperation` dans `src/types/gtm.ts` :
+- `kind: 'remove' | 'sync'`
+- `tagRowKey` + `tagCategory` : identifient le tag concerné
+- `steps: TriggerOpStep[]` : une étape par container, avec `unlink[]` / `linkExisting[]` / `createAndLink[]`
+- Queue `pendingTriggerOps[]` dans le store — actions : `addTriggerOp`, `removeTriggerOp`, `clearTriggerOps`
+- Bouton dans le header MonitoringPage : "X action(s) déclencheur(s)" (rouge) — futur panneau d'exécution
+- Exécution (PUT tag via API GTM) bloquée jusqu'à GCP OAuth
 
 ## Renommage groupé
 

@@ -115,3 +115,42 @@ Le drawer a un bouton "Renommer" pour standardiser les noms si nécessaire (cont
 **Données mock**
 
 Fichier `src/data/monitoring-mock.ts` avec 5 containers réalistes (Turkish Airlines, Air France, Corsair, Iberia, Swiss) et des écarts intentionnels : currency hardcodée (`'EUR'`) chez Air France vs variable chez les autres, `item_country` présent dans `JS - ecommerce.items` chez TK et SWI mais absent chez COR, différences de nommage de variables (`Constante - GA4 ID` vs `Var - GA4 ID`), `Constante - Currency` = CHF chez Swiss vs EUR ailleurs.
+
+---
+
+## 2026-06-26 (suite 3) — TagDrawer unifié + actions déclencheurs
+
+**Comparaison déclencheurs — sémantique, pas par nom**
+
+La section de comparaison de déclencheurs initialement construite dans l'onglet "Paramètres envoyés" a été déplacée dans l'onglet Tags du TagDrawer. Décision UX : les déclencheurs concernent le tag, pas ses paramètres.
+
+La comparaison est sémantique : deux déclencheurs sont considérés équivalents s'ils ont le même type et les mêmes conditions (clé `type::condition`), indépendamment de leur nom. Exemples : `DL - purchase` (Turkish) et `Custom Event - purchase` (Swiss) → même clé `customEvent::purchase` → identiques. Un `pageview` est identifié uniquement par son type (pas de conditions à comparer).
+
+**TagDrawer unifié — 2 onglets**
+
+`RenameDrawer` et `TagDetailDrawer` fusionnés en un seul composant `TagDrawer` avec deux onglets :
+- **Déclencheurs** : cards par container avec liste des triggers liés, indicateur de cohérence (vert / rouge), point rouge sur l'onglet si incohérence détectée
+- **Renommer** : formulaire de renommage groupé identique à l'ancien RenameDrawer
+
+Badge "déclencheurs variés" ajouté dans la matrice de couverture Tags (à côté de "noms variés") — affiché si au moins deux containers ont des déclencheurs sémantiquement différents pour le même tag.
+
+**PRD actions déclencheurs**
+
+Document `PRD_TriggerActions.md` (v1.1) définissant deux actions à implémenter depuis l'onglet Déclencheurs du TagDrawer :
+1. **Retirer** — retirer un trigger spécifique d'un tag dans un container donné
+2. **Synchroniser** — aligner les déclencheurs d'un container sur ceux d'un container de référence (mode Remplacer : le container cible finit identique à la référence)
+
+Décisions clés validées : Synchroniser = mode remplacement complet (pas d'ajout seul), détection des triggers sémantiquement équivalents avant création (pour éviter les doublons), deux panneaux séparés dans le header (renommages vs actions déclencheurs).
+
+**Action Retirer — implémentée**
+
+Première action du PRD déployée. Fonctionnement :
+- Bouton `[Retirer]` visible au survol de chaque ligne trigger dans les cards de l'onglet Déclencheurs
+- Clic → queues une `TriggerOperation` de kind `'remove'` dans le store Zustand (`pendingTriggerOps[]`)
+- Si c'est le dernier trigger du tag dans ce container : modal de confirmation "Dernier déclencheur — ce tag sera désactivé"
+- Déduplication : si l'opération est déjà planifiée pour ce tag + container + trigger, la ligne affiche le badge `Planifié` (orange) au lieu du bouton
+- Badge dans le header MonitoringPage : "X action(s) déclencheur(s)" en rouge, visible dès qu'une opération est en queue
+
+Nouveau type `TriggerOperation` dans `src/types/gtm.ts` avec steps `TriggerOpStep[]` modélisant chaque container impacté (unlink/linkExisting/createAndLink). Actions store : `addTriggerOp`, `removeTriggerOp`, `clearTriggerOps`.
+
+L'exécution réelle (PUT sur le tag via API GTM) reste bloquée jusqu'à GCP OAuth — seule la planification est disponible.
