@@ -407,14 +407,23 @@ function TriggersTab({
         </button>
       )}
       {[...infos].sort((a, b) => {
-        // absent → bottom; identical (no pending, consistent) → just above absent; rest → top
+        // Compute majority trigger set once (most common across present containers)
+        const presentInfos = infos.filter((i) => i.tagPresent);
+        const freq = new Map<string, number>();
+        for (const i of presentInfos) {
+          const k = [...i.triggers.map((t) => t.semanticKey)].sort().join('|');
+          freq.set(k, (freq.get(k) ?? 0) + 1);
+        }
+        const majoritySet = [...freq.entries()].sort((x, y) => y[1] - x[1])[0]?.[0] ?? '';
+
         const rank = (i: ContainerTriggerInfo) => {
           if (!i.tagPresent) return 2;
           const hasPendingOp = pendingTriggerOps.some(
             (op) => op.tagRowKey === tagRowKey && op.steps.some((s) => s.containerId === i.containerId),
           );
-          if (!hasPendingOp && consistent) return 1; // identical and no pending
-          return 0;
+          if (hasPendingOp) return 0;
+          const thisSet = [...i.triggers.map((t) => t.semanticKey)].sort().join('|');
+          return thisSet === majoritySet ? 1 : 0; // identical to majority → just above absent
         };
         return rank(a) - rank(b);
       }).map((info) => {
