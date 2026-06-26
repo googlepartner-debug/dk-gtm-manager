@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/auth-store';
 import { useGTMStore } from '../store/gtm-store';
 import { Badge } from '../components/ui/Badge';
@@ -28,6 +29,7 @@ export function ContainersPage() {
     isLoadingAccounts, isLoadingContainers, accountError,
   } = useGTMStore();
 
+  const navigate = useNavigate();
   const [sortMode, setSortMode] = useState<SortMode>('recent');
   const selectedCount = selectedContainerIds.size;
 
@@ -166,7 +168,7 @@ export function ContainersPage() {
           <span className="text-sm text-primary font-semibold">
             {selectedCount} container{selectedCount > 1 ? 's' : ''} sélectionné{selectedCount > 1 ? 's' : ''} — prêt à déployer
           </span>
-          <Button size="sm" onClick={() => window.location.assign('/dashboard/deploy')}>
+          <Button size="sm" onClick={() => navigate('/dashboard/deploy')}>
             Aller au déploiement →
           </Button>
         </div>

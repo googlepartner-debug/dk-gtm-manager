@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useGTMStore } from '../store/gtm-store';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
@@ -138,7 +139,7 @@ function PackageEditor({ pkg, onBack }: { pkg: DeploymentPackage; onBack: () => 
         </div>
 
         {/* Search bar — tags only */}
-        {activeTab === 'tags' && currentList.length > 0 && (
+        {activeTab === 'tags' && (
           <div className="px-4 pt-3 pb-0">
             <div className="relative">
               <svg width="13" height="13" viewBox="0 0 13 13" fill="none" className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-fg pointer-events-none">
@@ -274,6 +275,7 @@ function countEntities(pkg: DeploymentPackage) {
 
 export function PackagesPage() {
   const { packages, upsertPackage, removePackage, selectPackage } = useGTMStore();
+  const navigate = useNavigate();
   const [editingPkg, setEditingPkg] = useState<DeploymentPackage | null>(null);
 
   function openNew() {
@@ -371,7 +373,7 @@ export function PackagesPage() {
                   URL.revokeObjectURL(url);
                 }}>Exporter</Button>
                 <Button variant="secondary" size="sm" onClick={() => setEditingPkg(pkg)}>Modifier</Button>
-                <Button size="sm" onClick={() => { selectPackage(pkg.id); window.location.assign('/dashboard/deploy'); }}>Déployer</Button>
+                <Button size="sm" onClick={() => { selectPackage(pkg.id); navigate('/dashboard/deploy'); }}>Déployer</Button>
                 <button className="text-border hover:text-destructive transition-colors p-1" onClick={() => { if (confirm(`Supprimer "${pkg.name}" ?`)) removePackage(pkg.id); }}>
                   <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                     <path d="M2 3.5h10M5 3.5V2.5h4v1M5.5 6v4M8.5 6v4M3 3.5l.5 8.5h7l.5-8.5" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round"/>
