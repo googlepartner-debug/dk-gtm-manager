@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type {
   GTMAccount, GTMContainer, DeploymentPackage, DeploymentRecord, DeploymentResult,
-  ContainerDiff, DiffEntity, GlobalDiffSummary,
+  ContainerDiff, DiffEntity, GlobalDiffSummary, RenameOperation,
 } from '../types/gtm';
 import { STATIC_ACCOUNTS, STATIC_CONTAINERS } from '../data/gtm-static';
 import {
@@ -42,6 +42,9 @@ interface GTMStore {
   // History
   history: DeploymentRecord[];
 
+  // Rename queue
+  pendingRenames: RenameOperation[];
+
   // Actions — containers
   fetchAccounts: (token?: string) => Promise<void>;
   selectAccount: (accountId: string, token?: string) => Promise<void>;
@@ -68,6 +71,11 @@ interface GTMStore {
   deploy: (token: string, packageId: string, versionName: string) => Promise<void>;
   loadHistory: () => void;
   resetDeployment: () => void;
+
+  // Actions — renames
+  addRenames: (ops: Omit<RenameOperation, 'id' | 'status' | 'createdAt'>[]) => void;
+  removeRename: (id: string) => void;
+  clearRenames: () => void;
 }
 
 export const useGTMStore = create<GTMStore>((set, get) => ({
@@ -92,6 +100,8 @@ export const useGTMStore = create<GTMStore>((set, get) => ({
   autoPublish: true,
 
   history: loadHistory(),
+
+  pendingRenames: [],
 
   // ─── Accounts & containers ──────────────────────────────────────────────────
 
@@ -396,4 +406,19 @@ export const useGTMStore = create<GTMStore>((set, get) => ({
 
   loadHistory: () => set({ history: loadHistory() }),
   resetDeployment: () => set({ deploymentResults: [], deploymentProgress: 0 }),
+
+  addRenames: (ops) => {
+    const newOps: RenameOperation[] = ops.map((op) => ({
+      ...op,
+      id: crypto.randomUUID(),
+      status: 'pending',
+      createdAt: new Date().toISOString(),
+    }));
+    set((state) => ({ pendingRenames: [...state.pendingRenames, ...newOps] }));
+  },
+
+  removeRename: (id) =>
+    set((state) => ({ pendingRenames: state.pendingRenames.filter((r) => r.id !== id) })),
+
+  clearRenames: () => set({ pendingRenames: [] }),
 }));

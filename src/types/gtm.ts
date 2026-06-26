@@ -135,3 +135,19 @@ export interface GlobalDiffSummary {
   unchangedCount: number;
   selectedCount: number;
 }
+
+// ─── Rename queue ──────────────────────────────────────────────────────────────
+
+export interface RenameOperation {
+  id: string;
+  rowKey: string;       // event_name or tag name (display label)
+  category: string;
+  containerId: string;
+  containerName: string;
+  publicId: string;
+  oldName: string;
+  newName: string;
+  status: 'pending' | 'applied' | 'failed';
+  createdAt: string;
+  error?: string;
+}
