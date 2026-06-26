@@ -165,8 +165,9 @@ function TriggersTab({
                 <div className="space-y-1.5">
                   {info.triggers.map((tr, i) => {
                     const label = TRIGGER_TYPE_LABELS[tr.type] ?? tr.type;
-                    const isPageview = tr.type === 'pageview';
                     const isLast = info.triggers.length === 1;
+                    // Red only if this trigger is suspicious: pageview on a container that has multiple triggers (event tag firing on All Pages)
+                    const isSuspiciousPageview = tr.type === 'pageview' && info.triggers.length > 1;
                     const queuedOp = pendingTriggerOps.find(
                       (op) =>
                         op.kind === 'remove' &&
@@ -178,16 +179,16 @@ function TriggersTab({
                         <span
                           className="px-1.5 py-0.5 rounded text-[9px] font-semibold uppercase tracking-wider shrink-0"
                           style={{
-                            backgroundColor: isPageview ? 'hsl(0 85% 96%)' : 'hsl(220 13% 91%)',
-                            color: isPageview ? 'hsl(0 70% 50%)' : 'hsl(220 13% 45%)',
+                            backgroundColor: isSuspiciousPageview ? 'hsl(0 85% 96%)' : 'hsl(220 13% 91%)',
+                            color: isSuspiciousPageview ? 'hsl(0 70% 50%)' : 'hsl(220 13% 45%)',
                           }}
                         >
                           {label}
                         </span>
-                        <span className="text-[11px] font-mono flex-1" style={{ color: isPageview ? 'hsl(0 70% 45%)' : 'hsl(220 13% 20%)' }}>
+                        <span className="text-[11px] font-mono flex-1" style={{ color: isSuspiciousPageview ? 'hsl(0 70% 45%)' : 'hsl(220 13% 20%)' }}>
                           {tr.name}
                         </span>
-                        {isPageview && (
+                        {isSuspiciousPageview && (
                           <span className="text-[10px] font-medium px-1 py-0.5 rounded shrink-0" style={{ backgroundColor: 'hsl(0 85% 96%)', color: 'hsl(0 70% 45%)' }}>
                             Toutes les pages
                           </span>
@@ -448,7 +449,7 @@ export function TagDrawer({
     <>
       <div className="fixed inset-0 z-40" style={{ backgroundColor: 'hsl(220 13% 10% / 0.35)' }} onClick={onClose} />
 
-      <div className="fixed right-0 top-0 h-full z-50 flex flex-col shadow-2xl overflow-hidden" style={{ width: '520px', backgroundColor: 'white', borderLeft: '1px solid hsl(220 13% 91%)', position: 'relative' }}>
+      <div className="fixed right-0 top-0 h-full z-50 flex flex-col shadow-2xl overflow-hidden" style={{ width: '520px', backgroundColor: 'white', borderLeft: '1px solid hsl(220 13% 91%)' }}>
         {/* Header */}
         <div className="px-5 pt-4 pb-0 border-b shrink-0" style={{ borderColor: 'hsl(220 13% 91%)' }}>
           <div className="flex items-start justify-between mb-3">
