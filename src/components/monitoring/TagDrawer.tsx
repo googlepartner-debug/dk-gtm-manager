@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { clsx } from 'clsx';
 import type { MonitoringContainerData } from '../../data/monitoring-mock';
-import type { RenameOperation } from '../../types/gtm';
+import type { RenameOperation, GTMTrigger } from '../../types/gtm';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -10,6 +10,23 @@ type DrawerTab = 'triggers' | 'rename';
 interface TriggerEntry {
   name: string;
   type: string;
+  semanticKey: string;
+}
+
+// ─── Semantic key ──────────────────────────────────────────────────────────────
+
+function triggerSemanticKey(tr: GTMTrigger): string {
+  if (tr.type === 'customEvent') {
+    const ev = tr.customEventFilter?.[0]?.parameter?.find((p) => p.key === 'arg1')?.value ?? '';
+    return `customEvent::${ev}`;
+  }
+  if (tr.type === 'pageview' || tr.type === 'domReady' || tr.type === 'windowLoaded') {
+    return tr.type;
+  }
+  const filterKey = (tr.filter ?? [])
+    .map((c) => `${c.type}:${c.parameter.map((p) => p.value ?? '').sort().join(',')}`)
+    .sort().join('|');
+  return `${tr.type}::${filterKey}`;
 }
 
 interface ContainerTriggerInfo {
@@ -64,7 +81,7 @@ function buildTriggerInfo(
     const triggerMap = new Map(c.triggers.filter((tr) => tr.triggerId).map((tr) => [tr.triggerId!, tr]));
     const triggers: TriggerEntry[] = (tag.firingTriggerId ?? []).flatMap((id) => {
       const tr = triggerMap.get(id);
-      return tr ? [{ name: tr.name, type: tr.type }] : [];
+      return tr ? [{ name: tr.name, type: tr.type, semanticKey: triggerSemanticKey(tr) }] : [];
     });
     return { containerId: c.containerId, containerName: c.containerName, publicId: c.publicId, tagPresent: true, tagName: tag.name, triggers };
   });
@@ -73,8 +90,8 @@ function buildTriggerInfo(
 function triggersConsistent(infos: ContainerTriggerInfo[]): boolean {
   const present = infos.filter((i) => i.tagPresent);
   if (present.length === 0) return true;
-  const ref = present[0].triggers.map((t) => t.name).sort().join('|');
-  return present.every((i) => i.triggers.map((t) => t.name).sort().join('|') === ref);
+  const ref = present[0].triggers.map((t) => t.semanticKey).sort().join('|');
+  return present.every((i) => i.triggers.map((t) => t.semanticKey).sort().join('|') === ref);
 }
 
 // ─── Triggers tab ──────────────────────────────────────────────────────────────

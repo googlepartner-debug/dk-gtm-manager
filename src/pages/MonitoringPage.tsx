@@ -159,6 +159,42 @@ function buildMatrix(
   return rows;
 }
 
+// ─── Trigger semantic comparison ──────────────────────────────────────────────
+
+function triggerSemanticKey(tr: GTMTrigger): string {
+  if (tr.type === 'customEvent') {
+    // Compare on the event name condition, not the trigger name
+    const ev = tr.customEventFilter?.[0]?.parameter?.find((p) => p.key === 'arg1')?.value ?? '';
+    return `customEvent::${ev}`;
+  }
+  if (tr.type === 'pageview' || tr.type === 'domReady' || tr.type === 'windowLoaded') {
+    return tr.type;
+  }
+  // For click, scroll, etc. — normalize filter conditions
+  const filterKey = (tr.filter ?? [])
+    .map((c) => `${c.type}:${c.parameter.map((p) => p.value ?? '').sort().join(',')}`)
+    .sort().join('|');
+  return `${tr.type}::${filterKey}`;
+}
+
+function hasTriggerVariance(row: MatrixRow, containers: MonitoringContainerData[]): boolean {
+  const presentSets: string[][] = [];
+  for (const c of containers) {
+    const cell = row.cells[c.containerId];
+    if (!cell) continue; // tag absent — skip from comparison
+    const tag = c.tags.find((t) => t.name === cell.name);
+    if (!tag) continue;
+    const triggerMap = new Map(c.triggers.filter((tr) => tr.triggerId).map((tr) => [tr.triggerId!, tr]));
+    const keys = (tag.firingTriggerId ?? [])
+      .flatMap((id) => { const tr = triggerMap.get(id); return tr ? [triggerSemanticKey(tr)] : []; })
+      .sort();
+    presentSets.push(keys);
+  }
+  if (presentSets.length <= 1) return false;
+  const ref = presentSets[0].join('|');
+  return !presentSets.every((s) => s.join('|') === ref);
+}
+
 function coverageStats(rows: MatrixRow[], containerIds: string[]) {
   let total = 0, present = 0;
   for (const row of rows) {
@@ -280,6 +316,7 @@ function MatrixTable({
           const rowRenames = pendingRenames.filter((r) => r.rowKey === row.key && r.category === row.category);
           const presentNames = Object.values(row.cells).filter(Boolean).map((c) => c!.name);
           const hasInconsistentNames = new Set(presentNames).size > 1;
+          const hasTriggerDiff = kind === 'tags' && hasTriggerVariance(row, containers);
 
           return (
             <>
@@ -313,6 +350,14 @@ function MatrixTable({
                           style={{ backgroundColor: 'hsl(46 100% 50% / 0.15)', color: 'hsl(35 90% 40%)' }}
                         >
                           noms variés
+                        </span>
+                      )}
+                      {hasTriggerDiff && (
+                        <span
+                          className="px-1 py-0.5 rounded text-[10px] font-medium"
+                          style={{ backgroundColor: 'hsl(0 85% 97%)', color: 'hsl(0 70% 50%)' }}
+                        >
+                          déclencheurs variés
                         </span>
                       )}
                       {rowRenames.length > 0 && (
