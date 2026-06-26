@@ -406,7 +406,18 @@ function TriggersTab({
           Synchroniser depuis une référence
         </button>
       )}
-      {infos.map((info) => {
+      {[...infos].sort((a, b) => {
+        // absent → bottom; identical (no pending, consistent) → just above absent; rest → top
+        const rank = (i: ContainerTriggerInfo) => {
+          if (!i.tagPresent) return 2;
+          const hasPendingOp = pendingTriggerOps.some(
+            (op) => op.tagRowKey === tagRowKey && op.steps.some((s) => s.containerId === i.containerId),
+          );
+          if (!hasPendingOp && consistent) return 1; // identical and no pending
+          return 0;
+        };
+        return rank(a) - rank(b);
+      }).map((info) => {
         const isInconsistent = !consistent && info.tagPresent;
 
         // Pending operations for this container

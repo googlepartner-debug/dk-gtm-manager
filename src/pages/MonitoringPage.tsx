@@ -695,7 +695,7 @@ export function MonitoringPage() {
     setSelectedRow(null);
   }
 
-  const matrixKind = activeKind === 'params' ? 'tags' : activeKind;
+  const matrixKind = (activeKind === 'params' || activeKind === 'cleaning') ? 'tags' : activeKind;
 
   const allRowsForKind = useMemo(
     () => buildMatrix(matrixKind, containers, 'Tous', ''),
@@ -876,8 +876,8 @@ export function MonitoringPage() {
         </div>
       </div>
 
-      {/* Filters + Search — hidden on params tab */}
-      {activeKind !== 'params' && (
+      {/* Filters + Search — hidden on params and cleaning tabs */}
+      {activeKind !== 'params' && activeKind !== 'cleaning' && (
         <div
           className="px-6 py-3 flex items-center gap-3 border-b shrink-0 flex-wrap"
           style={{ borderColor: 'hsl(220 13% 91%)', backgroundColor: 'hsl(220 20% 98%)' }}
