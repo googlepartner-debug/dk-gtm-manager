@@ -2,7 +2,7 @@
 
 Page `/dashboard/monitoring`. Objectif : visualiser la présence et le contenu de chaque entité GTM (tags, déclencheurs, variables) à travers plusieurs containers simultanément.
 
-## Quatre onglets
+## Cinq onglets
 
 ### Tags
 - Matrice : lignes = tags (rowKey = `event_name` pour les tags GA4, nom du tag pour les autres), colonnes = containers
@@ -30,6 +30,15 @@ Page `/dashboard/monitoring`. Objectif : visualiser la présence et le contenu d
   - Gris "Tag absent" : le tag GA4 pour cet event n'existe pas dans ce container
 - Barre de couverture par container (% de paramètres envoyés)
 
+### Nettoyage
+- Détecte les entités orphelines (0 références) par container
+- **Triggers orphelins** : non référencés dans aucun `firingTriggerId` / `blockingTriggerId`
+- **Variables orphelines** : `{{nom}}` absent de tous les paramètres (tags + triggers + variables, récursif list/map)
+- UI : sections Déclencheurs / Variables, groupement par container, checkboxes, "Planifier la suppression de N entités"
+- Historique des suppressions (annulées / effectuées) avec bouton Annuler par op
+- Badge count dans l'onglet (total orphelins cross-containers)
+- `DeletionOperation` dans `src/types/gtm.ts` — store : `addDeletions`, `cancelDeletion`, `removeDeletion`, `clearDeletions`
+
 ## TagDrawer — onglet Déclencheurs
 
 `TagDrawer` remplace `TagDetailDrawer` + `RenameDrawer` en un seul composant avec deux onglets.
@@ -53,9 +62,19 @@ Page `/dashboard/monitoring`. Objectif : visualiser la présence et le contenu d
 - `kind: 'remove' | 'sync'`
 - `tagRowKey` + `tagCategory` : identifient le tag concerné
 - `steps: TriggerOpStep[]` : une étape par container, avec `unlink[]` / `linkExisting[]` / `createAndLink[]`
-- Queue `pendingTriggerOps[]` dans le store — actions : `addTriggerOp`, `removeTriggerOp`, `clearTriggerOps`
-- Bouton dans le header MonitoringPage : "X action(s) déclencheur(s)" (orange-rouge) → panneau slide-in listant les ops avec × par opération
+- `status: 'pending' | 'applied' | 'failed' | 'cancelled'`
+- Queue `pendingTriggerOps[]` dans le store — actions : `addTriggerOp`, `removeTriggerOp`, `cancelTriggerOp`, `clearTriggerOps`
+- Bouton dans le header : visible même quand tout est annulé ("Historique déclencheurs") — panneau slide-in avec sections "En attente" + "Historique" (ops annulées/effectuées persistées)
+- Le × dans le panneau annule (status → cancelled) — les ops ne disparaissent plus, elles restent en historique
 - Exécution (PUT tag via API GTM) bloquée jusqu'à GCP OAuth
+
+## SyncPlanView — ordre des containers cibles
+
+Containers triés par priorité : **À synchroniser** (orange, action requise) → **Déjà identique** (vert) → **Tag absent** (gris, tout en bas). Tri sur `status` du diff calculé par `computeSyncDiff`.
+
+## Icônes types de tag
+
+`TagTypeIcon.tsx` : composant SVG inline par catégorie (cercle coloré + symbole blanc). Affiché dans les en-têtes de groupe de la matrice Tags. Tentative d'extraction des vraies icônes GTM (base64 SVGs dans `data-ng-src`) non aboutie — liste Angular virtualisée. Icônes maison conservées.
 
 ## Renommage groupé
 
