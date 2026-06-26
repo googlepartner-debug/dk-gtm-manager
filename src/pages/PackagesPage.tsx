@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useGTMStore } from '../store/gtm-store';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
@@ -30,6 +30,7 @@ function PackageEditor({ pkg, onBack }: { pkg: DeploymentPackage; onBack: () => 
   const [editing, setEditing] = useState(pkg);
   const [activeTab, setActiveTab] = useState<TabKind>('tags');
   const [drawer, setDrawer] = useState<{ kind: DrawerKind; index: number | null } | null>(null);
+  const [eventSearch, setEventSearch] = useState('');
 
   function save(updated: DeploymentPackage) {
     setEditing(updated);
@@ -68,6 +69,20 @@ function PackageEditor({ pkg, onBack }: { pkg: DeploymentPackage; onBack: () => 
   const drawerKind: DrawerKind = activeTab === 'tags' ? 'tag' : activeTab === 'variables' ? 'variable' : 'trigger';
   const currentList = editing.entities[activeTab] as (GTMTag | GTMVariable | GTMTrigger)[];
   const editingEntity = drawer?.index !== null && drawer?.index !== undefined ? currentList[drawer.index] : null;
+
+  // Filter tags by event_name when search is active
+  const filteredList = useMemo(() => {
+    if (activeTab !== 'tags' || !eventSearch.trim()) return currentList;
+    const q = eventSearch.toLowerCase();
+    return currentList.filter((entity) => {
+      const tag = entity as GTMTag;
+      const eventName = tag.parameter?.find((p) => p.key === 'event_name')?.value ?? '';
+      return (
+        eventName.toLowerCase().includes(q) ||
+        tag.name.toLowerCase().includes(q)
+      );
+    });
+  }, [currentList, activeTab, eventSearch]);
 
   return (
     <div className="max-w-3xl">
@@ -122,6 +137,37 @@ function PackageEditor({ pkg, onBack }: { pkg: DeploymentPackage; onBack: () => 
           ))}
         </div>
 
+        {/* Search bar — tags only */}
+        {activeTab === 'tags' && currentList.length > 0 && (
+          <div className="px-4 pt-3 pb-0">
+            <div className="relative">
+              <svg width="13" height="13" viewBox="0 0 13 13" fill="none" className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-fg pointer-events-none">
+                <circle cx="5.5" cy="5.5" r="4" stroke="currentColor" strokeWidth="1.25"/>
+                <path d="M9 9l2.5 2.5" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round"/>
+              </svg>
+              <input
+                type="text"
+                value={eventSearch}
+                onChange={(e) => setEventSearch(e.target.value)}
+                placeholder="Filtrer par event_name ou nom du tag…"
+                className="w-full h-8 pl-8 pr-3 text-xs font-mono border border-border rounded-lg bg-muted text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-fg/50"
+              />
+              {eventSearch && (
+                <button onClick={() => setEventSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-fg hover:text-foreground">
+                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                    <path d="M2 2l6 6M8 2l-6 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                  </svg>
+                </button>
+              )}
+            </div>
+            {eventSearch && (
+              <p className="text-xs text-muted-fg mt-1.5 mb-1">
+                {filteredList.length} résultat{filteredList.length !== 1 ? 's' : ''} sur {currentList.length}
+              </p>
+            )}
+          </div>
+        )}
+
         {/* Entity list */}
         <div className="p-4">
           {currentList.length === 0 ? (
@@ -131,13 +177,20 @@ function PackageEditor({ pkg, onBack }: { pkg: DeploymentPackage; onBack: () => 
                 Ajouter un {drawerKind}
               </Button>
             </div>
+          ) : filteredList.length === 0 ? (
+            <div className="text-center py-6 text-sm text-muted-fg">
+              Aucun tag avec l'event <code className="font-mono bg-muted px-1 rounded">{eventSearch}</code>
+            </div>
           ) : (
             <div className="space-y-2">
-              {currentList.map((entity, i) => (
+              {filteredList.map((entity, i) => {
+                const realIndex = currentList.indexOf(entity);
+                const eventName = (entity as GTMTag).parameter?.find((p) => p.key === 'event_name')?.value;
+                return (
                 <div
-                  key={i}
+                  key={realIndex}
                   className="flex items-center gap-3 px-4 py-3 rounded-lg border border-border hover:border-primary/30 hover:bg-primary/3 transition-all cursor-pointer group"
-                  onClick={() => openEdit(drawerKind, i)}
+                  onClick={() => openEdit(drawerKind, realIndex)}
                 >
                   <div className="w-8 h-8 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0 text-[9px] font-bold text-primary">
                     {(() => {
@@ -149,6 +202,7 @@ function PackageEditor({ pkg, onBack }: { pkg: DeploymentPackage; onBack: () => 
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-medium text-foreground truncate">{entity.name}</span>
                       <Badge variant="default">{getTypeLabel(drawerKind, entity.type)}</Badge>
+                      {eventName && <span className="text-xs font-mono bg-primary/8 text-primary px-1.5 py-0.5 rounded">{eventName}</span>}
                     </div>
                     {drawerKind === 'tag' && (entity as GTMTag).firingTriggerId?.length ? (
                       <div className="text-xs text-muted-fg mt-0.5 truncate">
@@ -159,7 +213,7 @@ function PackageEditor({ pkg, onBack }: { pkg: DeploymentPackage; onBack: () => 
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button
                       className="p-1.5 text-muted-fg hover:text-foreground transition-colors rounded"
-                      onClick={(e) => { e.stopPropagation(); openEdit(drawerKind, i); }}
+                      onClick={(e) => { e.stopPropagation(); openEdit(drawerKind, realIndex); }}
                     >
                       <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
                         <path d="M9 2l2 2-7 7H2V9l7-7z" stroke="currentColor" strokeWidth="1.25" strokeLinejoin="round"/>
@@ -167,7 +221,7 @@ function PackageEditor({ pkg, onBack }: { pkg: DeploymentPackage; onBack: () => 
                     </button>
                     <button
                       className="p-1.5 text-muted-fg hover:text-destructive transition-colors rounded"
-                      onClick={(e) => { e.stopPropagation(); if (confirm(`Supprimer "${entity.name}" ?`)) removeEntity(drawerKind, i); }}
+                      onClick={(e) => { e.stopPropagation(); if (confirm(`Supprimer "${entity.name}" ?`)) removeEntity(drawerKind, realIndex); }}
                     >
                       <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
                         <path d="M2 3.5h9M4.5 3.5V2.5h4v1M5 6v4M8 6v4M2.5 3.5l.5 8h7l.5-8" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round"/>
@@ -175,7 +229,8 @@ function PackageEditor({ pkg, onBack }: { pkg: DeploymentPackage; onBack: () => 
                     </button>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

@@ -328,38 +328,74 @@ function CoverageNotes({ notes }: { notes: CoverageEntry[] }) {
 function EventNameFilter({
   eventNames, active, onSelect,
 }: { eventNames: string[]; active: string | null; onSelect: (name: string | null) => void }) {
+  const [query, setQuery] = useState('');
   if (eventNames.length === 0) return null;
 
+  const suggestions = query.trim()
+    ? eventNames.filter((n) => n.toLowerCase().includes(query.toLowerCase()))
+    : eventNames;
+
+  function handleInput(val: string) {
+    setQuery(val);
+    if (val === '') onSelect(null);
+  }
+
+  function handleSelect(name: string) {
+    setQuery(name);
+    onSelect(name);
+  }
+
+  function handleClear() {
+    setQuery('');
+    onSelect(null);
+  }
+
   return (
-    <div className="flex items-center gap-2 flex-wrap mb-3 p-3 bg-card border border-border rounded-xl">
-      <span className="text-xs font-semibold text-muted-fg shrink-0">Filtre GA4 event :</span>
-      <div className="flex items-center gap-1.5 flex-wrap">
-        {eventNames.map((name) => (
-          <button
-            key={name}
-            onClick={() => onSelect(active === name ? null : name)}
-            className={clsx(
-              'text-xs font-mono px-2.5 py-1 rounded-full border transition-all',
-              active === name
-                ? 'bg-primary text-white border-primary'
-                : 'bg-card text-muted-fg border-border hover:border-primary/50 hover:text-foreground'
-            )}
-          >
-            {name}
-          </button>
-        ))}
+    <div className="mb-3 p-3 bg-card border border-border rounded-xl">
+      <div className="flex items-center gap-2 mb-2">
+        <svg width="13" height="13" viewBox="0 0 13 13" fill="none" className="text-muted-fg shrink-0">
+          <circle cx="5.5" cy="5.5" r="4" stroke="currentColor" strokeWidth="1.25"/>
+          <path d="M9 9l2.5 2.5" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round"/>
+        </svg>
+        <span className="text-xs font-semibold text-muted-fg">Filtrer par event GA4</span>
         {active && (
-          <button
-            onClick={() => onSelect(null)}
-            className="text-xs text-muted-fg hover:text-foreground ml-1 flex items-center gap-1"
-          >
+          <span className="text-xs font-mono bg-primary/10 text-primary px-2 py-0.5 rounded-full ml-1">{active}</span>
+        )}
+      </div>
+      <div className="relative">
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => handleInput(e.target.value)}
+          placeholder="add_to_cart, purchase…"
+          className="w-full h-8 pl-3 pr-7 text-xs font-mono border border-border rounded-lg bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-fg/50"
+        />
+        {query && (
+          <button onClick={handleClear} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-fg hover:text-foreground">
             <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
               <path d="M2 2l6 6M8 2l-6 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
             </svg>
-            Effacer
           </button>
         )}
       </div>
+      {query && suggestions.length > 0 && suggestions[0] !== query && (
+        <div className="flex flex-wrap gap-1.5 mt-2">
+          {suggestions.map((name) => (
+            <button
+              key={name}
+              onClick={() => handleSelect(name)}
+              className={clsx(
+                'text-xs font-mono px-2 py-0.5 rounded-full border transition-all',
+                active === name
+                  ? 'bg-primary text-white border-primary'
+                  : 'bg-muted text-muted-fg border-border hover:border-primary/50 hover:text-foreground'
+              )}
+            >
+              {name}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
