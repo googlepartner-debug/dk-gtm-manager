@@ -47,6 +47,23 @@ interface ContainerTriggerInfo {
   triggers: TriggerEntry[];
 }
 
+interface SyncTriggerAction {
+  semanticKey: string;
+  name: string;
+  triggerId?: string;
+  triggerData?: GTMTrigger;
+}
+
+interface SyncContainerDiff {
+  containerId: string;
+  containerName: string;
+  publicId: string;
+  status: 'identical' | 'needs-sync' | 'absent';
+  toUnlink: TriggerEntry[];
+  toLinkExisting: SyncTriggerAction[];
+  toCreate: SyncTriggerAction[];
+}
+
 interface ContainerOption {
   containerId: string;
   containerName: string;
@@ -103,6 +120,259 @@ function triggersConsistent(infos: ContainerTriggerInfo[]): boolean {
   return present.every((i) => i.triggers.map((t) => t.semanticKey).sort().join('|') === ref);
 }
 
+// ─── Sync diff ────────────────────────────────────────────────────────────────
+
+function computeSyncDiff(
+  refContainerId: string,
+  infos: ContainerTriggerInfo[],
+  containers: MonitoringContainerData[],
+): SyncContainerDiff[] {
+  const refInfo = infos.find((i) => i.containerId === refContainerId);
+  if (!refInfo) return [];
+  const refKeys = new Set(refInfo.triggers.map((t) => t.semanticKey));
+  const refContainer = containers.find((c) => c.containerId === refContainerId);
+
+  return infos
+    .filter((i) => i.containerId !== refContainerId)
+    .map((info): SyncContainerDiff => {
+      if (!info.tagPresent) {
+        return { containerId: info.containerId, containerName: info.containerName, publicId: info.publicId, status: 'absent', toUnlink: [], toLinkExisting: [], toCreate: [] };
+      }
+
+      const targetKeys = new Set(info.triggers.map((t) => t.semanticKey));
+      const identical = refKeys.size === targetKeys.size && [...refKeys].every((k) => targetKeys.has(k));
+      if (identical) {
+        return { containerId: info.containerId, containerName: info.containerName, publicId: info.publicId, status: 'identical', toUnlink: [], toLinkExisting: [], toCreate: [] };
+      }
+
+      const toUnlink = info.triggers.filter((t) => !refKeys.has(t.semanticKey));
+
+      const targetContainer = containers.find((c) => c.containerId === info.containerId);
+      const toLinkExisting: SyncTriggerAction[] = [];
+      const toCreate: SyncTriggerAction[] = [];
+
+      for (const refTr of refInfo.triggers) {
+        if (targetKeys.has(refTr.semanticKey)) continue; // already linked
+        const existing = targetContainer?.triggers.find(
+          (tr) => tr.triggerId && triggerSemanticKey(tr) === refTr.semanticKey,
+        );
+        if (existing) {
+          toLinkExisting.push({ semanticKey: refTr.semanticKey, name: existing.name, triggerId: existing.triggerId });
+        } else {
+          const fullTrigger = refContainer?.triggers.find((tr) => tr.triggerId === refTr.triggerId);
+          toCreate.push({ semanticKey: refTr.semanticKey, name: refTr.name, triggerData: fullTrigger });
+        }
+      }
+
+      return { containerId: info.containerId, containerName: info.containerName, publicId: info.publicId, status: 'needs-sync', toUnlink, toLinkExisting, toCreate };
+    });
+}
+
+// ─── Sync plan view ────────────────────────────────────────────────────────────
+
+function SyncPlanView({
+  infos,
+  containers,
+  rowKey,
+  category,
+  onPlan,
+  onBack,
+}: {
+  infos: ContainerTriggerInfo[];
+  containers: MonitoringContainerData[];
+  rowKey: string;
+  category: string;
+  onPlan: (steps: import('../../types/gtm').TriggerOpStep[], refContainerId: string, refContainerName: string) => void;
+  onBack: () => void;
+}) {
+  const presentInfos = infos.filter((i) => i.tagPresent);
+  const [refId, setRefId] = useState<string>(presentInfos[0]?.containerId ?? '');
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  const diffs = useMemo(
+    () => (refId ? computeSyncDiff(refId, infos, containers) : []),
+    [refId, infos, containers],
+  );
+
+  // Auto-select all "needs-sync" when ref changes
+  useEffect(() => {
+    setSelected(new Set(diffs.filter((d) => d.status === 'needs-sync').map((d) => d.containerId)));
+  }, [refId]);
+
+  const refInfo = infos.find((i) => i.containerId === refId);
+  const needsSync = diffs.filter((d) => d.status === 'needs-sync');
+  const selectedCount = needsSync.filter((d) => selected.has(d.containerId)).length;
+
+  function toggleContainer(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  function handlePlan() {
+    const refContainer = containers.find((c) => c.containerId === refId);
+    const steps: import('../../types/gtm').TriggerOpStep[] = diffs
+      .filter((d) => d.status === 'needs-sync' && selected.has(d.containerId))
+      .map((d) => ({
+        containerId: d.containerId,
+        containerName: d.containerName,
+        publicId: d.publicId,
+        unlink: d.toUnlink.map((t) => t.triggerId).filter((id): id is string => !!id),
+        linkExisting: d.toLinkExisting.map((t) => t.triggerId).filter((id): id is string => !!id),
+        createAndLink: d.toCreate.map((t) => t.triggerData).filter((tr): tr is GTMTrigger => !!tr),
+      }));
+    onPlan(steps, refId, refContainer?.containerName ?? refId);
+  }
+
+  return (
+    <div className="flex-1 flex flex-col overflow-hidden">
+      {/* Sub-header */}
+      <div className="px-5 py-3 border-b flex items-center gap-2 shrink-0" style={{ borderColor: 'hsl(220 13% 91%)', backgroundColor: 'hsl(220 20% 98%)' }}>
+        <button onClick={onBack} className="p-1 rounded text-muted-fg hover:text-foreground transition-colors">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M9 2L4 7l5 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        </button>
+        <span className="text-xs font-semibold text-foreground">Synchroniser les déclencheurs</span>
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+        {/* Reference selector */}
+        <div>
+          <p className="text-[11px] font-semibold text-muted-fg uppercase tracking-wider mb-2">Container de référence</p>
+          <div className="space-y-1">
+            {presentInfos.map((info) => (
+              <button
+                key={info.containerId}
+                onClick={() => setRefId(info.containerId)}
+                className="w-full flex items-start gap-2.5 px-3 py-2 rounded-lg border text-left transition-all"
+                style={{
+                  borderColor: refId === info.containerId ? 'hsl(142 60% 55%)' : 'hsl(220 13% 88%)',
+                  backgroundColor: refId === info.containerId ? 'hsl(142 72% 96%)' : 'white',
+                }}
+              >
+                <div className="w-3.5 h-3.5 rounded-full border-2 mt-0.5 shrink-0 flex items-center justify-center" style={{ borderColor: refId === info.containerId ? 'hsl(142 60% 40%)' : 'hsl(220 13% 70%)' }}>
+                  {refId === info.containerId && <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: 'hsl(142 60% 40%)' }} />}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-medium text-foreground">{info.containerName}</span>
+                    <span className="text-[10px] font-mono text-muted-fg">{info.publicId}</span>
+                  </div>
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {info.triggers.map((t, i) => (
+                      <span key={i} className="px-1 py-0.5 rounded text-[9px] font-medium" style={{ backgroundColor: 'hsl(220 13% 91%)', color: 'hsl(220 13% 40%)' }}>
+                        {t.name}
+                      </span>
+                    ))}
+                    {info.triggers.length === 0 && <span className="text-[10px] italic text-muted-fg">Aucun déclencheur</span>}
+                  </div>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Target containers */}
+        {refId && (
+          <div>
+            <p className="text-[11px] font-semibold text-muted-fg uppercase tracking-wider mb-2">Containers cibles</p>
+            <div className="space-y-2">
+              {diffs.map((diff) => {
+                const isNeeds = diff.status === 'needs-sync';
+                const isSelected = selected.has(diff.containerId);
+                return (
+                  <div
+                    key={diff.containerId}
+                    className="rounded-xl border overflow-hidden"
+                    style={{
+                      borderColor: diff.status === 'absent' ? 'hsl(220 13% 88%)' : diff.status === 'identical' ? 'hsl(142 60% 70%)' : isSelected ? 'hsl(38 90% 60%)' : 'hsl(220 13% 88%)',
+                      opacity: diff.status === 'absent' ? 0.5 : 1,
+                    }}
+                  >
+                    {/* Card header */}
+                    <div
+                      className="px-3 py-2 flex items-center justify-between"
+                      style={{
+                        backgroundColor: diff.status === 'absent' ? 'hsl(220 20% 97%)' : diff.status === 'identical' ? 'hsl(142 72% 96%)' : isSelected ? 'hsl(38 100% 97%)' : 'hsl(220 20% 97%)',
+                      }}
+                    >
+                      <div className="flex items-center gap-2">
+                        {isNeeds && (
+                          <button
+                            onClick={() => toggleContainer(diff.containerId)}
+                            className="w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-colors"
+                            style={{
+                              borderColor: isSelected ? 'hsl(38 90% 50%)' : 'hsl(220 13% 65%)',
+                              backgroundColor: isSelected ? 'hsl(38 90% 50%)' : 'white',
+                            }}
+                          >
+                            {isSelected && <svg width="8" height="8" viewBox="0 0 8 8" fill="none"><path d="M1.5 4l2 2 3-3.5" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                          </button>
+                        )}
+                        <span className="text-xs font-semibold text-foreground">{diff.containerName}</span>
+                        <span className="text-[10px] font-mono text-muted-fg">{diff.publicId}</span>
+                      </div>
+                      <span
+                        className="text-[10px] font-medium px-1.5 py-0.5 rounded"
+                        style={{
+                          backgroundColor: diff.status === 'absent' ? 'hsl(220 13% 91%)' : diff.status === 'identical' ? 'hsl(142 72% 90%)' : 'hsl(38 100% 92%)',
+                          color: diff.status === 'absent' ? 'hsl(220 13% 50%)' : diff.status === 'identical' ? 'hsl(142 60% 30%)' : 'hsl(35 80% 35%)',
+                        }}
+                      >
+                        {diff.status === 'absent' ? 'Tag absent' : diff.status === 'identical' ? 'Déjà identique' : 'À synchroniser'}
+                      </span>
+                    </div>
+
+                    {/* Diff details */}
+                    {diff.status === 'needs-sync' && (
+                      <div className="px-3 py-2 space-y-1" style={{ backgroundColor: 'white' }}>
+                        {diff.toUnlink.map((t, i) => (
+                          <div key={i} className="flex items-center gap-1.5 text-[11px]">
+                            <span className="font-bold shrink-0" style={{ color: 'hsl(0 70% 55%)' }}>−</span>
+                            <span className="font-mono" style={{ color: 'hsl(0 70% 40%)' }}>{t.name}</span>
+                            <span className="text-muted-fg text-[10px]">retirer</span>
+                          </div>
+                        ))}
+                        {diff.toLinkExisting.map((t, i) => (
+                          <div key={i} className="flex items-center gap-1.5 text-[11px]">
+                            <span className="font-bold shrink-0" style={{ color: 'hsl(220 70% 55%)' }}>~</span>
+                            <span className="font-mono" style={{ color: 'hsl(220 13% 30%)' }}>{t.name}</span>
+                            <span className="text-muted-fg text-[10px]">lier l'existant</span>
+                          </div>
+                        ))}
+                        {diff.toCreate.map((t, i) => (
+                          <div key={i} className="flex items-center gap-1.5 text-[11px]">
+                            <span className="font-bold shrink-0" style={{ color: 'hsl(142 60% 40%)' }}>+</span>
+                            <span className="font-mono" style={{ color: 'hsl(220 13% 30%)' }}>{t.name}</span>
+                            <span className="text-muted-fg text-[10px]">créer et lier</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Footer */}
+      <div className="px-5 py-4 border-t shrink-0" style={{ borderColor: 'hsl(220 13% 91%)' }}>
+        <button
+          disabled={selectedCount === 0}
+          onClick={handlePlan}
+          className="w-full px-4 py-2 text-xs font-medium rounded-lg text-white transition-all"
+          style={{ backgroundColor: selectedCount > 0 ? 'hsl(38 90% 50%)' : 'hsl(220 13% 85%)', cursor: selectedCount > 0 ? 'pointer' : 'not-allowed' }}
+        >
+          {selectedCount === 0 ? 'Sélectionner des containers' : `Planifier ${selectedCount} synchronisation${selectedCount > 1 ? 's' : ''}`}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Triggers tab ──────────────────────────────────────────────────────────────
 
 function TriggersTab({
@@ -119,9 +389,20 @@ function TriggersTab({
   tagRowKey: string;
   onRemove: (containerId: string, containerName: string, publicId: string, trigger: TriggerEntry, isLast: boolean) => void;
   onCancelOp: (opId: string) => void;
+  onSync: () => void;
 }) {
   return (
     <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
+      {!consistent && (
+        <button
+          onClick={onSync}
+          className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg border text-xs font-medium transition-all hover:opacity-80"
+          style={{ borderColor: 'hsl(38 90% 60%)', backgroundColor: 'hsl(38 100% 97%)', color: 'hsl(35 80% 35%)' }}
+        >
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6a4 4 0 0 1 7.5-1.5M10 6a4 4 0 0 1-7.5 1.5" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round"/><path d="M9.5 2v2.5H7M3 9.5V7H5.5" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          Synchroniser depuis une référence
+        </button>
+      )}
       {infos.map((info) => {
         const isInconsistent = !consistent && info.tagPresent;
         return (
@@ -405,6 +686,7 @@ export function TagDrawer({
 }: TagDrawerProps) {
   const [activeTab, setActiveTab] = useState<DrawerTab>(initialTab);
   const [removeConfirm, setRemoveConfirm] = useState<RemoveConfirm | null>(null);
+  const [syncMode, setSyncMode] = useState(false);
   const { pendingTriggerOps, addTriggerOp, removeTriggerOp } = useGTMStore();
 
   const triggerInfos = useMemo(() => buildTriggerInfo(containers, cells), [containers, cells]);
@@ -507,7 +789,26 @@ export function TagDrawer({
         </div>
 
         {/* Tab content */}
-        {activeTab === 'triggers' ? (
+        {syncMode ? (
+          <SyncPlanView
+            infos={triggerInfos}
+            containers={containers}
+            rowKey={rowKey}
+            category={category}
+            onPlan={(steps, refContainerId, refContainerName) => {
+              addTriggerOp({
+                kind: 'sync',
+                tagRowKey: rowKey,
+                tagCategory: category,
+                referenceContainerId: refContainerId,
+                referenceContainerName: refContainerName,
+                steps,
+              });
+              setSyncMode(false);
+            }}
+            onBack={() => setSyncMode(false)}
+          />
+        ) : activeTab === 'triggers' ? (
           <TriggersTab
             infos={triggerInfos}
             consistent={consistent}
@@ -515,6 +816,7 @@ export function TagDrawer({
             tagRowKey={rowKey}
             onRemove={handleRemove}
             onCancelOp={removeTriggerOp}
+            onSync={() => setSyncMode(true)}
           />
         ) : (
           <RenameTab
