@@ -186,3 +186,28 @@ Bouton dans le header MonitoringPage (rouge, visible si ops en queue) → drawer
 - Drawer TagDrawer : `position: relative` dans le style inline écrasait le `fixed` de Tailwind → drawer s'insérais dans le flux DOM au lieu de se superposer. Supprimé.
 - Triggers pageview colorés en rouge pour tous les tags sans exception → remplacé par `isSuspiciousPageview` (rouge uniquement si pageview coexiste avec d'autres triggers dans le même container).
 - `onSync` déclaré dans le type TypeScript de TriggersTab mais absent du destructuring → TypeError à l'appel, page blanche. Corrigé.
+
+---
+
+## 2026-06-26 (suite 5) — Historique ops, Nettoyage, icônes, correctifs UX
+
+**Historique des opérations dans le panneau "Actions déclencheurs"**
+
+Le panneau affiche maintenant toutes les ops (pas seulement les pendantes). Le × dans le panneau annule (status → `cancelled`) au lieu de supprimer — les ops restent visibles en historique. Section "En attente" + section "Historique" (ops annulées grises, ops effectuées vertes). Bouton "Effacer" pour nettoyer l'historique. Le bouton header reste visible en gris même quand tout est annulé ("Historique déclencheurs"). Nouveau store action `cancelTriggerOp`.
+
+**Onglet Nettoyage (5ème onglet Monitoring)**
+
+Détecte les entités GTM orphelines (0 références) par container :
+- **Triggers orphelins** : non référencés dans aucun `firingTriggerId` / `blockingTriggerId` de tag
+- **Variables orphelines** : `{{nom}}` introuvable dans tous les paramètres (tags + triggers + variables, récursif sur list/map)
+
+UI : sections Déclencheurs / Variables, groupement par container, checkboxes + "Planifier la suppression de N entités", historique des suppressions avec "Annuler" et "Appliquer (OAuth requis)". Badge count dans l'onglet. Nouveau type `DeletionOperation` + actions store `addDeletions` / `cancelDeletion` / `removeDeletion` / `clearDeletions`.
+
+**Icônes SVG types de tag**
+
+`TagTypeIcon.tsx` créé — cercles SVG colorés (brand colors) avec symboles blancs pour GA4, Google Ads, Floodlight, Kameleoon, AB Tasty, Meta Pixel, TikTok, Hotjar, HTML Custom. Affichés dans les en-têtes de groupe de la matrice (onglet Tags). Tentative d'extraction des vraies icônes GTM depuis le tag type picker (base64 SVGs dans `data-ng-src`) — liste virtualisée Angular, accès scope incomplet, non résolu. Icônes SVG maison conservées.
+
+**Correctifs UX**
+
+- Onglet Nettoyage : barre de catégories masquée (elle affichait `jsm, u, k` de l'onglet Variables précédent). `matrixKind` corrigé pour éviter `'cleaning'` comme kind de matrix.
+- SyncPlanView sort order : containers "À synchroniser" en haut, "Déjà identique" avant-dernier, "Tag absent" tout en bas. Tri basé sur `status` du diff, pas sur le booléen global `consistent`.
