@@ -29,15 +29,7 @@ Pour chaque page wiki concernée par les changements :
 - `wiki/deferred-features.md` → si une feature différée est implémentée ou redéfinie
 - Mettre à jour `wiki/index.md` si une nouvelle page wiki est créée
 
-### 4. Préparer le changelog (hebdomadaire)
-
-Lire `.changelog-pending.json`. Vérifier le champ `lastSync`.
-- Si `lastSync` est null ou > 7 jours : pousser ≤3 features vers le repo `googlepartner-debug/changelog`
-- Méthode : GitHub Contents API via `gh api` ou `git clone` dans un dossier temp
-- Après push réussi : mettre à jour `lastSync` avec la date du jour dans `.changelog-pending.json`
-- Vider le tableau `pending` des features poussées
-
-### 5. Commit si modifications
+### 4. Commit si modifications
 
 ```bash
 git -C "C:/Users/KOPELMANRon/projets perso/dk-gtm-manager" add JOURNAL.md wiki/ .changelog-pending.json

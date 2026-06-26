@@ -1,18 +1,5 @@
 {
   "project": "DK GTM Manager",
-  "lastSync": null,
-  "pending": [
-    {
-      "date": "2026-06-26",
-      "feature": "Éditeur de packages GTM-like avec drawer slide-in, sélection de type, champs typés et section déclenchement"
-    },
-    {
-      "date": "2026-06-26",
-      "feature": "Matrice de couverture GA4 cross-containers : visualisation présent/absent/à-jour par event_name en un coup d'œil"
-    },
-    {
-      "date": "2026-06-25",
-      "feature": "Combobox recherchable pour sélection de compte GTM parmi 160+ comptes avec filtre temps-réel"
-    }
-  ]
+  "pushEnabled": false,
+  "pending": []
 }
