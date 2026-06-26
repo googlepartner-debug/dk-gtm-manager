@@ -380,6 +380,7 @@ function TriggersTab({
   consistent,
   pendingTriggerOps,
   tagRowKey,
+  containers,
   onRemove,
   onCancelOp,
   onSync,
@@ -388,6 +389,7 @@ function TriggersTab({
   consistent: boolean;
   pendingTriggerOps: import('../../types/gtm').TriggerOperation[];
   tagRowKey: string;
+  containers: MonitoringContainerData[];
   onRemove: (containerId: string, containerName: string, publicId: string, trigger: TriggerEntry, isLast: boolean) => void;
   onCancelOp: (opId: string) => void;
   onSync: () => void;
@@ -406,12 +408,41 @@ function TriggersTab({
       )}
       {infos.map((info) => {
         const isInconsistent = !consistent && info.tagPresent;
+
+        // Pending operations for this container
+        const pendingRemoveOp = pendingTriggerOps.find(
+          (op) => op.kind === 'remove' && op.tagRowKey === tagRowKey &&
+            op.steps.some((s) => s.containerId === info.containerId),
+        );
+        const pendingSyncOp = pendingTriggerOps.find(
+          (op) => op.kind === 'sync' && op.tagRowKey === tagRowKey &&
+            op.steps.some((s) => s.containerId === info.containerId),
+        );
+        const syncStep = pendingSyncOp?.steps.find((s) => s.containerId === info.containerId);
+
+        // Resolve linkExisting trigger names from the full container data
+        const containerData = containers.find((c) => c.containerId === info.containerId);
+        const toAddRows: { name: string; type: string; kind: 'link' | 'create' }[] = [];
+        if (syncStep) {
+          for (const id of syncStep.linkExisting ?? []) {
+            const tr = containerData?.triggers.find((t) => t.triggerId === id);
+            if (tr) toAddRows.push({ name: tr.name, type: tr.type, kind: 'link' });
+          }
+          for (const tr of syncStep.createAndLink ?? []) {
+            toAddRows.push({ name: tr.name, type: tr.type, kind: 'create' });
+          }
+        }
+
+        const hasPending = !!pendingRemoveOp || !!pendingSyncOp;
+
         return (
           <div
             key={info.containerId}
             className="rounded-xl border overflow-hidden"
             style={{
-              borderColor: !info.tagPresent
+              borderColor: hasPending
+                ? 'hsl(38 90% 60%)'
+                : !info.tagPresent
                 ? 'hsl(220 13% 88%)'
                 : isInconsistent
                 ? 'hsl(0 70% 80%)'
@@ -421,7 +452,9 @@ function TriggersTab({
             <div
               className="px-3.5 py-2.5 flex items-center justify-between"
               style={{
-                backgroundColor: !info.tagPresent
+                backgroundColor: hasPending
+                  ? 'hsl(38 100% 97%)'
+                  : !info.tagPresent
                   ? 'hsl(220 20% 97%)'
                   : isInconsistent
                   ? 'hsl(0 85% 97%)'
@@ -432,32 +465,39 @@ function TriggersTab({
                 <span className="text-xs font-semibold text-foreground">{info.containerName}</span>
                 <span className="font-mono text-[10px] text-muted-fg">{info.publicId}</span>
               </div>
-              {info.tagPresent && info.tagName && (
-                <span className="text-[10px] font-mono truncate max-w-[160px]" style={{ color: 'hsl(220 13% 50%)' }} title={info.tagName}>
-                  {info.tagName}
-                </span>
-              )}
+              <div className="flex items-center gap-1.5">
+                {pendingSyncOp && (
+                  <span className="text-[10px] font-medium px-1.5 py-0.5 rounded" style={{ backgroundColor: 'hsl(38 90% 50% / 0.15)', color: 'hsl(35 80% 35%)' }}>
+                    Sync planifiée
+                  </span>
+                )}
+                {info.tagPresent && info.tagName && !pendingSyncOp && (
+                  <span className="text-[10px] font-mono truncate max-w-[160px]" style={{ color: 'hsl(220 13% 50%)' }} title={info.tagName}>
+                    {info.tagName}
+                  </span>
+                )}
+              </div>
             </div>
             <div className="px-3.5 py-2.5" style={{ backgroundColor: 'white' }}>
               {!info.tagPresent ? (
                 <span className="text-[11px] italic" style={{ color: 'hsl(220 13% 55%)' }}>Tag absent dans ce container</span>
-              ) : info.triggers.length === 0 ? (
+              ) : info.triggers.length === 0 && toAddRows.length === 0 ? (
                 <span className="text-[11px] italic" style={{ color: 'hsl(0 70% 55%)' }}>Aucun déclencheur lié</span>
               ) : (
                 <div className="space-y-1.5">
                   {info.triggers.map((tr, i) => {
                     const label = TRIGGER_TYPE_LABELS[tr.type] ?? tr.type;
                     const isLast = info.triggers.length === 1;
-                    // Red only if this trigger is suspicious: pageview on a container that has multiple triggers (event tag firing on All Pages)
                     const isSuspiciousPageview = tr.type === 'pageview' && info.triggers.length > 1;
-                    const queuedOp = pendingTriggerOps.find(
-                      (op) =>
-                        op.kind === 'remove' &&
-                        op.tagRowKey === tagRowKey &&
+                    const queuedRemove = pendingTriggerOps.find(
+                      (op) => op.kind === 'remove' && op.tagRowKey === tagRowKey &&
                         op.steps.some((s) => s.containerId === info.containerId && s.unlink?.includes(tr.triggerId ?? '')),
                     );
+                    const syncWillRemove = syncStep?.unlink?.includes(tr.triggerId ?? '');
+
+                    const willBeRemoved = !!queuedRemove || !!syncWillRemove;
                     return (
-                      <div key={i} className="group flex items-center gap-2">
+                      <div key={i} className="group flex items-center gap-2" style={{ opacity: willBeRemoved ? 0.5 : 1 }}>
                         <span
                           className="px-1.5 py-0.5 rounded text-[9px] font-semibold uppercase tracking-wider shrink-0"
                           style={{
@@ -467,33 +507,47 @@ function TriggersTab({
                         >
                           {label}
                         </span>
-                        <span className="text-[11px] font-mono flex-1" style={{ color: isSuspiciousPageview ? 'hsl(0 70% 45%)' : 'hsl(220 13% 20%)' }}>
+                        <span
+                          className="text-[11px] font-mono flex-1"
+                          style={{
+                            color: isSuspiciousPageview ? 'hsl(0 70% 45%)' : 'hsl(220 13% 20%)',
+                            textDecoration: willBeRemoved ? 'line-through' : 'none',
+                          }}
+                        >
                           {tr.name}
                         </span>
-                        {isSuspiciousPageview && (
+                        {isSuspiciousPageview && !willBeRemoved && (
                           <span className="text-[10px] font-medium px-1 py-0.5 rounded shrink-0" style={{ backgroundColor: 'hsl(0 85% 96%)', color: 'hsl(0 70% 45%)' }}>
                             Toutes les pages
                           </span>
                         )}
-                        {queuedOp ? (
-                          <button
-                            onClick={() => onCancelOp(queuedOp.id)}
-                            className="text-[10px] px-1.5 py-0.5 rounded shrink-0 transition-opacity hover:opacity-70"
-                            style={{ backgroundColor: 'hsl(46 100% 50% / 0.15)', color: 'hsl(35 90% 40%)' }}
-                            title="Annuler ce retrait"
-                          >
-                            Planifié ×
-                          </button>
-                        ) : tr.triggerId ? (
+                        {willBeRemoved ? (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded shrink-0" style={{ backgroundColor: 'hsl(0 85% 96%)', color: 'hsl(0 65% 50%)' }}>
+                            à retirer
+                          </span>
+                        ) : queuedRemove ? null : tr.triggerId && !syncStep ? (
                           <button
                             onClick={() => onRemove(info.containerId, info.containerName, info.publicId, tr, isLast)}
-                            className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium hover:opacity-100"
+                            className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium"
                             style={{ backgroundColor: 'hsl(0 85% 97%)', color: 'hsl(0 70% 50%)' }}
-                            title="Retirer ce déclencheur du tag"
                           >
                             Retirer
                           </button>
                         ) : null}
+                      </div>
+                    );
+                  })}
+                  {toAddRows.map((tr, i) => {
+                    const label = TRIGGER_TYPE_LABELS[tr.type] ?? tr.type;
+                    return (
+                      <div key={`add-${i}`} className="flex items-center gap-2">
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold uppercase tracking-wider shrink-0" style={{ backgroundColor: 'hsl(142 60% 93%)', color: 'hsl(142 50% 30%)' }}>
+                          {label}
+                        </span>
+                        <span className="text-[11px] font-mono flex-1" style={{ color: 'hsl(142 50% 30%)' }}>{tr.name}</span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded shrink-0" style={{ backgroundColor: 'hsl(142 60% 93%)', color: 'hsl(142 50% 30%)' }}>
+                          {tr.kind === 'link' ? 'à lier' : 'à créer'}
+                        </span>
                       </div>
                     );
                   })}
@@ -815,6 +869,7 @@ export function TagDrawer({
             consistent={consistent}
             pendingTriggerOps={pendingTriggerOps}
             tagRowKey={rowKey}
+            containers={containers}
             onRemove={handleRemove}
             onCancelOp={removeTriggerOp}
             onSync={() => setSyncMode(true)}
