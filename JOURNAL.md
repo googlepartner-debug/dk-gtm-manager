@@ -62,4 +62,16 @@ Nouveau composant `GA4CoverageMatrix` intégré dans la page Déployer (toggle E
 
 **Intégration second-brain**
 
-Création de `.second-brain.json` à la racine. Init git du projet. Prêt pour `claude plugin install second-brain@digitalkeys`.
+Création de `.second-brain.json` à la racine. Init git du projet. Plugin marketplace `second-brain@digitalkeys` non disponible — câblage manuel via `.claude/commands/second-brain.md` + `CLAUDE.md` + cron horaire à `:23`. Push changelog désactivé (`pushEnabled: false`) sur décision explicite — second-brain local uniquement.
+
+---
+
+## 2026-06-26 (suite)
+
+**Contrainte identifiée : filtre GA4 sans OAuth**
+
+Le filtre event_name dans DiffView (chips) n'est pas utilisable sans GCP OAuth car il n'y a pas de données de tags réels dans les containers — uniquement ce qui est dans le package. Deux améliorations décidées :
+1. Barre de recherche event_name dans PackagesPage — filtre les tags du package par event_name (fonctionne sans OAuth)
+2. Remplacement des chips par un input texte dans DiffView — meilleure UX quand OAuth sera disponible
+
+La matrice de couverture GA4 et le filtre DiffView restent dépendants de l'OAuth pour avoir de la vraie donnée container.

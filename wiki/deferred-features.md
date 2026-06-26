@@ -1,5 +1,11 @@
 # Features différées — DK GTM Manager
 
+## Filtre GA4 sur données containers réelles
+
+**Description** : pouvoir taper `add_to_cart` et voir quels tags dans les containers GTM sélectionnés trackent cet event — indépendamment du nom du tag.
+**Dépend de** : GCP OAuth (lire les workspaces des containers).
+**État actuel** : le filtre chips dans DiffView et la GA4CoverageMatrix existent mais ne fonctionnent que sur les données de diff post-analyse. Sans OAuth, seule la recherche dans le package local est disponible.
+
 ## GCP OAuth
 
 **Pourquoi différé** : pas encore de projet GCP configuré, usage solo actuel couvert par données statiques.
