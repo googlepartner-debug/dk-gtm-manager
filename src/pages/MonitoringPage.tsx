@@ -2,12 +2,13 @@ import { useState, useMemo } from 'react';
 import { clsx } from 'clsx';
 import { MONITORING_MOCK, type MonitoringContainerData } from '../data/monitoring-mock';
 import { RenameDrawer, type ContainerOption } from '../components/monitoring/RenameDrawer';
+import { ParamMatrixTab } from '../components/monitoring/ParamMatrixTab';
 import { useGTMStore } from '../store/gtm-store';
 import type { GTMTag, GTMTrigger, GTMVariable } from '../types/gtm';
 
 // ─── Entity kind ───────────────────────────────────────────────────────────────
 
-type EntityKind = 'tags' | 'triggers' | 'variables';
+type EntityKind = 'tags' | 'triggers' | 'variables' | 'params';
 
 // ─── Category configs per kind ─────────────────────────────────────────────────
 
@@ -450,6 +451,7 @@ const KIND_LABELS: Record<EntityKind, string> = {
   tags: 'Tags',
   triggers: 'Déclencheurs',
   variables: 'Variables',
+  params: 'Paramètres envoyés',
 };
 
 export function MonitoringPage() {
@@ -471,14 +473,16 @@ export function MonitoringPage() {
     setSelectedRow(null);
   }
 
+  const matrixKind = activeKind === 'params' ? 'tags' : activeKind;
+
   const allRowsForKind = useMemo(
-    () => buildMatrix(activeKind, containers, 'Tous', ''),
-    [activeKind],
+    () => buildMatrix(matrixKind, containers, 'Tous', ''),
+    [matrixKind],
   );
 
   const rows = useMemo(
-    () => buildMatrix(activeKind, containers, activeCategory, search),
-    [activeKind, activeCategory, search],
+    () => buildMatrix(matrixKind, containers, activeCategory, search),
+    [matrixKind, activeCategory, search],
   );
 
   const stats = useMemo(() => coverageStats(rows, containerIds), [rows, containerIds]);
@@ -498,11 +502,23 @@ export function MonitoringPage() {
     : null;
 
   // Per-kind counts for tabs
-  const kindCounts = useMemo(() => ({
-    tags: buildMatrix('tags', containers, 'Tous', '').length,
-    triggers: buildMatrix('triggers', containers, 'Tous', '').length,
-    variables: buildMatrix('variables', containers, 'Tous', '').length,
-  }), []);
+  const kindCounts = useMemo(() => {
+    const ga4Events = new Set<string>();
+    for (const c of containers) {
+      for (const tag of c.tags) {
+        if (tag.type === 'gaawe') {
+          const ev = tag.parameter?.find((p) => p.key === 'event_name')?.value;
+          if (ev) ga4Events.add(ev);
+        }
+      }
+    }
+    return {
+      tags: buildMatrix('tags', containers, 'Tous', '').length,
+      triggers: buildMatrix('triggers', containers, 'Tous', '').length,
+      variables: buildMatrix('variables', containers, 'Tous', '').length,
+      params: ga4Events.size,
+    };
+  }, []);
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -570,10 +586,10 @@ export function MonitoringPage() {
             </button>
           ))}
 
-          <div className="mx-3 h-4 w-px" style={{ backgroundColor: 'hsl(220 13% 88%)' }} />
+          {activeKind !== 'params' && <div className="mx-3 h-4 w-px" style={{ backgroundColor: 'hsl(220 13% 88%)' }} />}
 
           {/* Coverage for active kind */}
-          <div className="flex items-center gap-1.5 text-xs">
+          {activeKind !== 'params' && <div className="flex items-center gap-1.5 text-xs">
             <div className="w-16 h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: 'hsl(220 13% 91%)' }}>
               <div
                 className="h-full rounded-full"
@@ -590,62 +606,68 @@ export function MonitoringPage() {
                 {stats.total - stats.present} absent{stats.total - stats.present > 1 ? 's' : ''}
               </span>
             )}
+          </div>}
+        </div>
+      </div>
+
+      {/* Filters + Search — hidden on params tab */}
+      {activeKind !== 'params' && (
+        <div
+          className="px-6 py-3 flex items-center gap-3 border-b shrink-0 flex-wrap"
+          style={{ borderColor: 'hsl(220 13% 91%)', backgroundColor: 'hsl(220 20% 98%)' }}
+        >
+          <CategoryFilterBar
+            kind={activeKind as 'tags' | 'triggers' | 'variables'}
+            rows={allRowsForKind}
+            activeCategory={activeCategory}
+            onChange={setActiveCategory}
+          />
+          <div className="flex-1" />
+          <div className="relative">
+            <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-fg" width="12" height="12" viewBox="0 0 12 12" fill="none">
+              <circle cx="5" cy="5" r="3.5" stroke="currentColor" strokeWidth="1.25"/>
+              <path d="M7.5 7.5l2 2" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round"/>
+            </svg>
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder={activeKind === 'tags' ? 'add_to_cart, tag name…' : activeKind === 'triggers' ? 'DL - purchase…' : 'DLV - ecommerce…'}
+              className="pl-7 pr-3 py-1.5 text-xs rounded-lg border outline-none w-52"
+              style={{ borderColor: 'hsl(220 13% 85%)', backgroundColor: 'white', color: 'hsl(220 13% 20%)' }}
+            />
+            {search && (
+              <button onClick={() => setSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-fg hover:text-foreground">
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 2l6 6M8 2l-6 6" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round"/></svg>
+              </button>
+            )}
           </div>
         </div>
-      </div>
+      )}
 
-      {/* Filters + Search */}
-      <div
-        className="px-6 py-3 flex items-center gap-3 border-b shrink-0 flex-wrap"
-        style={{ borderColor: 'hsl(220 13% 91%)', backgroundColor: 'hsl(220 20% 98%)' }}
-      >
-        <CategoryFilterBar
-          kind={activeKind}
-          rows={allRowsForKind}
-          activeCategory={activeCategory}
-          onChange={setActiveCategory}
-        />
-        <div className="flex-1" />
-        <div className="relative">
-          <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-fg" width="12" height="12" viewBox="0 0 12 12" fill="none">
-            <circle cx="5" cy="5" r="3.5" stroke="currentColor" strokeWidth="1.25"/>
-            <path d="M7.5 7.5l2 2" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round"/>
-          </svg>
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder={activeKind === 'tags' ? 'add_to_cart, tag name…' : activeKind === 'triggers' ? 'DL - purchase…' : 'DLV - ecommerce…'}
-            className="pl-7 pr-3 py-1.5 text-xs rounded-lg border outline-none w-52"
-            style={{ borderColor: 'hsl(220 13% 85%)', backgroundColor: 'white', color: 'hsl(220 13% 20%)' }}
-          />
-          {search && (
-            <button onClick={() => setSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-fg hover:text-foreground">
-              <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 2l6 6M8 2l-6 6" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round"/></svg>
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Matrix */}
-      <div className="flex-1 overflow-auto">
-        <MatrixTable
-          kind={activeKind}
-          rows={rows}
-          containers={containers}
-          pendingRenames={pendingRenames}
-          onRowClick={(row) => { setSelectedRow(row); setShowPlan(false); }}
-        />
-      </div>
-
-      {/* Footer */}
-      <div
-        className="px-6 py-2.5 border-t flex items-center gap-2 shrink-0 text-xs"
-        style={{ borderColor: 'hsl(220 13% 91%)', backgroundColor: 'hsl(220 20% 98%)', color: 'hsl(220 13% 45%)' }}
-      >
-        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="shrink-0"><circle cx="6" cy="6" r="5" stroke="currentColor" strokeWidth="1"/><path d="M6 4v2.5M6 8v.25" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round"/></svg>
-        Données simulées · cliquez une ligne pour renommer · badge violet = plan de renommage
-      </div>
+      {/* Matrix or Params tab */}
+      {activeKind === 'params' ? (
+        <ParamMatrixTab containers={containers} />
+      ) : (
+        <>
+          <div className="flex-1 overflow-auto">
+            <MatrixTable
+              kind={activeKind}
+              rows={rows}
+              containers={containers}
+              pendingRenames={pendingRenames}
+              onRowClick={(row) => { setSelectedRow(row); setShowPlan(false); }}
+            />
+          </div>
+          <div
+            className="px-6 py-2.5 border-t flex items-center gap-2 shrink-0 text-xs"
+            style={{ borderColor: 'hsl(220 13% 91%)', backgroundColor: 'hsl(220 20% 98%)', color: 'hsl(220 13% 45%)' }}
+          >
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="shrink-0"><circle cx="6" cy="6" r="5" stroke="currentColor" strokeWidth="1"/><path d="M6 4v2.5M6 8v.25" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round"/></svg>
+            Données simulées · cliquez une ligne pour renommer · badge violet = plan de renommage
+          </div>
+        </>
+      )}
 
       {/* Rename Drawer */}
       {selectedRow && selectedRowConfig && (
