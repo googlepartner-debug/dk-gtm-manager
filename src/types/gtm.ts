@@ -46,6 +46,7 @@ export interface GTMVariable {
 export interface GTMTrigger {
   name: string;
   type: string;
+  triggerId?: string;
   filter?: GTMCondition[];
   customEventFilter?: GTMCondition[];
   parameter?: GTMParameter[];

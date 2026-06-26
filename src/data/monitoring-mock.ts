@@ -13,9 +13,9 @@ export interface MonitoringContainerData {
 
 // ─── Turkish Airlines ──────────────────────────────────────────────────────────
 const TK_TAGS: GTMTag[] = [
-  { name: 'GA4 — Configuration', type: 'gaawc', parameter: [{ type: 'template', key: 'measurementId', value: 'G-XXXXXXX001' }] },
+  { name: 'GA4 — Configuration', type: 'gaawc', firingTriggerId: ['t101'], parameter: [{ type: 'template', key: 'measurementId', value: 'G-XXXXXXX001' }] },
   {
-    name: 'GA4 — purchase', type: 'gaawe', parameter: [
+    name: 'GA4 — purchase', type: 'gaawe', firingTriggerId: ['t103'], parameter: [
       { type: 'template', key: 'measurement_id', value: '{{GA4 Measurement ID}}' },
       { type: 'template', key: 'event_name',     value: 'purchase' },
       { type: 'template', key: 'currency',        value: '{{Constante - Currency}}' },
@@ -27,7 +27,7 @@ const TK_TAGS: GTMTag[] = [
     ],
   },
   {
-    name: 'GA4 — add_to_cart', type: 'gaawe', parameter: [
+    name: 'GA4 — add_to_cart', type: 'gaawe', firingTriggerId: ['t104'], parameter: [
       { type: 'template', key: 'measurement_id', value: '{{GA4 Measurement ID}}' },
       { type: 'template', key: 'event_name',     value: 'add_to_cart' },
       { type: 'template', key: 'currency',        value: '{{Constante - Currency}}' },
@@ -37,7 +37,7 @@ const TK_TAGS: GTMTag[] = [
     ],
   },
   {
-    name: 'GA4 — view_item', type: 'gaawe', parameter: [
+    name: 'GA4 — view_item', type: 'gaawe', firingTriggerId: ['t105'], parameter: [
       { type: 'template', key: 'measurement_id', value: '{{GA4 Measurement ID}}' },
       { type: 'template', key: 'event_name',     value: 'view_item' },
       { type: 'template', key: 'currency',        value: '{{Constante - Currency}}' },
@@ -45,7 +45,7 @@ const TK_TAGS: GTMTag[] = [
     ],
   },
   {
-    name: 'GA4 — begin_checkout', type: 'gaawe', parameter: [
+    name: 'GA4 — begin_checkout', type: 'gaawe', firingTriggerId: ['t106'], parameter: [
       { type: 'template', key: 'measurement_id', value: '{{GA4 Measurement ID}}' },
       { type: 'template', key: 'event_name',     value: 'begin_checkout' },
       { type: 'template', key: 'currency',        value: '{{Constante - Currency}}' },
@@ -59,13 +59,13 @@ const TK_TAGS: GTMTag[] = [
 ];
 
 const TK_TRIGGERS: GTMTrigger[] = [
-  { name: 'All Pages', type: 'pageview' },
-  { name: 'DOM Ready', type: 'domReady' },
-  { name: 'DL - purchase', type: 'customEvent', customEventFilter: [{ type: 'equals', parameter: [{ type: 'template', key: 'arg0', value: '{{_event}}' }, { type: 'template', key: 'arg1', value: 'purchase' }] }] },
-  { name: 'DL - add_to_cart', type: 'customEvent', customEventFilter: [{ type: 'equals', parameter: [{ type: 'template', key: 'arg0', value: '{{_event}}' }, { type: 'template', key: 'arg1', value: 'add_to_cart' }] }] },
-  { name: 'DL - view_item', type: 'customEvent', customEventFilter: [{ type: 'equals', parameter: [{ type: 'template', key: 'arg0', value: '{{_event}}' }, { type: 'template', key: 'arg1', value: 'view_item' }] }] },
-  { name: 'DL - begin_checkout', type: 'customEvent', customEventFilter: [{ type: 'equals', parameter: [{ type: 'template', key: 'arg0', value: '{{_event}}' }, { type: 'template', key: 'arg1', value: 'begin_checkout' }] }] },
-  { name: 'Click - CTA Réservation', type: 'click', filter: [{ type: 'contains', parameter: [{ type: 'template', key: 'arg0', value: '{{Click Classes}}' }, { type: 'template', key: 'arg1', value: 'btn-book' }] }] },
+  { triggerId: 't101', name: 'All Pages', type: 'pageview' },
+  { triggerId: 't102', name: 'DOM Ready', type: 'domReady' },
+  { triggerId: 't103', name: 'DL - purchase', type: 'customEvent', customEventFilter: [{ type: 'equals', parameter: [{ type: 'template', key: 'arg0', value: '{{_event}}' }, { type: 'template', key: 'arg1', value: 'purchase' }] }] },
+  { triggerId: 't104', name: 'DL - add_to_cart', type: 'customEvent', customEventFilter: [{ type: 'equals', parameter: [{ type: 'template', key: 'arg0', value: '{{_event}}' }, { type: 'template', key: 'arg1', value: 'add_to_cart' }] }] },
+  { triggerId: 't105', name: 'DL - view_item', type: 'customEvent', customEventFilter: [{ type: 'equals', parameter: [{ type: 'template', key: 'arg0', value: '{{_event}}' }, { type: 'template', key: 'arg1', value: 'view_item' }] }] },
+  { triggerId: 't106', name: 'DL - begin_checkout', type: 'customEvent', customEventFilter: [{ type: 'equals', parameter: [{ type: 'template', key: 'arg0', value: '{{_event}}' }, { type: 'template', key: 'arg1', value: 'begin_checkout' }] }] },
+  { triggerId: 't107', name: 'Click - CTA Réservation', type: 'click', filter: [{ type: 'contains', parameter: [{ type: 'template', key: 'arg0', value: '{{Click Classes}}' }, { type: 'template', key: 'arg1', value: 'btn-book' }] }] },
 ];
 
 const JS_ITEMS_WITH_COUNTRY = 'function() {\n  var dl = window.dataLayer || [];\n  var ecom = dl.slice().reverse().find(function(d) { return d.ecommerce; });\n  if (!ecom) return [];\n  return (ecom.ecommerce.items || []).map(function(item) {\n    return {\n      item_id:       item.item_id || item.id,\n      item_name:     item.item_name || item.name,\n      item_brand:    item.item_brand    || \'\',\n      item_category: item.item_category || \'\',\n      item_country:  item.item_country  || \'\',\n      price:         parseFloat(item.price)      || 0,\n      quantity:      parseInt(item.quantity, 10) || 1\n    };\n  });\n}';
@@ -84,9 +84,9 @@ const TK_VARIABLES: GTMVariable[] = [
 
 // ─── Air France ────────────────────────────────────────────────────────────────
 const AF_TAGS: GTMTag[] = [
-  { name: 'GA4 Config', type: 'gaawc', parameter: [{ type: 'template', key: 'measurementId', value: 'G-XXXXXXX002' }] },
+  { name: 'GA4 Config', type: 'gaawc', firingTriggerId: ['t201'], parameter: [{ type: 'template', key: 'measurementId', value: 'G-XXXXXXX002' }] },
   {
-    name: 'GA4 Event — purchase', type: 'gaawe', parameter: [
+    name: 'GA4 Event — purchase', type: 'gaawe', firingTriggerId: ['t203'], parameter: [
       { type: 'template', key: 'measurement_id',  value: '{{GA4 ID}}' },
       { type: 'template', key: 'event_name',      value: 'purchase' },
       { type: 'template', key: 'currency',         value: 'EUR' },             // hardcodé !
@@ -97,7 +97,7 @@ const AF_TAGS: GTMTag[] = [
     ],
   },
   {
-    name: 'GA4 Event — add_to_cart', type: 'gaawe', parameter: [
+    name: 'GA4 Event — add_to_cart', type: 'gaawe', firingTriggerId: ['t206'], parameter: [
       { type: 'template', key: 'measurement_id', value: '{{GA4 ID}}' },
       { type: 'template', key: 'event_name',     value: 'add_to_cart' },
       { type: 'template', key: 'currency',        value: 'EUR' },             // hardcodé !
@@ -106,7 +106,7 @@ const AF_TAGS: GTMTag[] = [
     ],
   },
   {
-    name: 'GA4 Event — view_item', type: 'gaawe', parameter: [
+    name: 'GA4 Event — view_item', type: 'gaawe', firingTriggerId: ['t204'], parameter: [
       { type: 'template', key: 'measurement_id', value: '{{GA4 ID}}' },
       { type: 'template', key: 'event_name',     value: 'view_item' },
       { type: 'template', key: 'currency',        value: 'EUR' },             // hardcodé !
@@ -114,7 +114,7 @@ const AF_TAGS: GTMTag[] = [
     ],
   },
   {
-    name: 'GA4 Event — search', type: 'gaawe', parameter: [
+    name: 'GA4 Event — search', type: 'gaawe', firingTriggerId: ['t205'], parameter: [
       { type: 'template', key: 'measurement_id', value: '{{GA4 ID}}' },
       { type: 'template', key: 'event_name',     value: 'search' },
       { type: 'template', key: 'search_term',    value: '{{DLV - searchTerm}}' },
@@ -126,13 +126,13 @@ const AF_TAGS: GTMTag[] = [
 ];
 
 const AF_TRIGGERS: GTMTrigger[] = [
-  { name: 'All Pages', type: 'pageview' },
-  { name: 'DOM Ready - AF', type: 'domReady' },
-  { name: 'Custom Event - purchase', type: 'customEvent', customEventFilter: [{ type: 'equals', parameter: [{ type: 'template', key: 'arg0', value: '{{_event}}' }, { type: 'template', key: 'arg1', value: 'purchase' }] }] },
-  { name: 'Custom Event - view_item', type: 'customEvent', customEventFilter: [{ type: 'equals', parameter: [{ type: 'template', key: 'arg0', value: '{{_event}}' }, { type: 'template', key: 'arg1', value: 'view_item' }] }] },
-  { name: 'Custom Event - search', type: 'customEvent', customEventFilter: [{ type: 'equals', parameter: [{ type: 'template', key: 'arg0', value: '{{_event}}' }, { type: 'template', key: 'arg1', value: 'search' }] }] },
-  { name: 'Custom Event - add_to_cart', type: 'customEvent', customEventFilter: [{ type: 'equals', parameter: [{ type: 'template', key: 'arg0', value: '{{_event}}' }, { type: 'template', key: 'arg1', value: 'add_to_cart' }] }] },
-  { name: 'Scroll 50%', type: 'scrollDepth', parameter: [{ type: 'template', key: 'verticalThresholdPercents', value: '50' }] },
+  { triggerId: 't201', name: 'All Pages', type: 'pageview' },
+  { triggerId: 't202', name: 'DOM Ready - AF', type: 'domReady' },
+  { triggerId: 't203', name: 'Custom Event - purchase', type: 'customEvent', customEventFilter: [{ type: 'equals', parameter: [{ type: 'template', key: 'arg0', value: '{{_event}}' }, { type: 'template', key: 'arg1', value: 'purchase' }] }] },
+  { triggerId: 't204', name: 'Custom Event - view_item', type: 'customEvent', customEventFilter: [{ type: 'equals', parameter: [{ type: 'template', key: 'arg0', value: '{{_event}}' }, { type: 'template', key: 'arg1', value: 'view_item' }] }] },
+  { triggerId: 't205', name: 'Custom Event - search', type: 'customEvent', customEventFilter: [{ type: 'equals', parameter: [{ type: 'template', key: 'arg0', value: '{{_event}}' }, { type: 'template', key: 'arg1', value: 'search' }] }] },
+  { triggerId: 't206', name: 'Custom Event - add_to_cart', type: 'customEvent', customEventFilter: [{ type: 'equals', parameter: [{ type: 'template', key: 'arg0', value: '{{_event}}' }, { type: 'template', key: 'arg1', value: 'add_to_cart' }] }] },
+  { triggerId: 't207', name: 'Scroll 50%', type: 'scrollDepth', parameter: [{ type: 'template', key: 'verticalThresholdPercents', value: '50' }] },
 ];
 
 const AF_VARIABLES: GTMVariable[] = [
@@ -146,9 +146,9 @@ const AF_VARIABLES: GTMVariable[] = [
 
 // ─── Corsair ───────────────────────────────────────────────────────────────────
 const COR_TAGS: GTMTag[] = [
-  { name: 'GA4 — Configuration Tag', type: 'gaawc', parameter: [{ type: 'template', key: 'measurementId', value: 'G-XXXXXXX003' }] },
+  { name: 'GA4 — Configuration Tag', type: 'gaawc', firingTriggerId: ['t301'], parameter: [{ type: 'template', key: 'measurementId', value: 'G-XXXXXXX003' }] },
   {
-    name: 'GA4 — Purchase Event', type: 'gaawe', parameter: [
+    name: 'GA4 — Purchase Event', type: 'gaawe', firingTriggerId: ['t304'], parameter: [
       { type: 'template', key: 'measurement_id',  value: '{{Var - GA4 ID}}' },
       { type: 'template', key: 'event_name',      value: 'purchase' },
       { type: 'template', key: 'currency',         value: '{{JS - currency}}' }, // via JS custom
@@ -160,7 +160,7 @@ const COR_TAGS: GTMTag[] = [
     ],
   },
   {
-    name: 'GA4 — Add to Cart', type: 'gaawe', parameter: [
+    name: 'GA4 — Add to Cart', type: 'gaawe', firingTriggerId: ['t305'], parameter: [
       { type: 'template', key: 'measurement_id', value: '{{Var - GA4 ID}}' },
       { type: 'template', key: 'event_name',     value: 'add_to_cart' },
       { type: 'template', key: 'currency',        value: '{{JS - currency}}' }, // via JS custom
@@ -170,7 +170,7 @@ const COR_TAGS: GTMTag[] = [
     ],
   },
   {
-    name: 'GA4 — View Item List', type: 'gaawe', parameter: [
+    name: 'GA4 — View Item List', type: 'gaawe', firingTriggerId: ['t306'], parameter: [
       { type: 'template', key: 'measurement_id',  value: '{{Var - GA4 ID}}' },
       { type: 'template', key: 'event_name',      value: 'view_item_list' },
       { type: 'template', key: 'item_list_id',    value: '{{DLV - ecommerce.item_list_id}}' },
@@ -179,7 +179,7 @@ const COR_TAGS: GTMTag[] = [
     ],
   },
   {
-    name: 'GA4 — Search', type: 'gaawe', parameter: [
+    name: 'GA4 — Search', type: 'gaawe', firingTriggerId: ['t301'], parameter: [
       { type: 'template', key: 'measurement_id', value: '{{Var - GA4 ID}}' },
       { type: 'template', key: 'event_name',     value: 'search' },
       { type: 'template', key: 'search_term',    value: '{{DLV - search_term}}' }, // nom différent d'AF
@@ -190,14 +190,14 @@ const COR_TAGS: GTMTag[] = [
 ];
 
 const COR_TRIGGERS: GTMTrigger[] = [
-  { name: 'All Pages', type: 'pageview' },
-  { name: 'DOM Ready', type: 'domReady' },
-  { name: 'Window Loaded', type: 'windowLoaded' },
-  { name: 'DL - purchase', type: 'customEvent', customEventFilter: [{ type: 'equals', parameter: [{ type: 'template', key: 'arg0', value: '{{_event}}' }, { type: 'template', key: 'arg1', value: 'purchase' }] }] },
-  { name: 'DL - add_to_cart', type: 'customEvent', customEventFilter: [{ type: 'equals', parameter: [{ type: 'template', key: 'arg0', value: '{{_event}}' }, { type: 'template', key: 'arg1', value: 'add_to_cart' }] }] },
-  { name: 'DL - view_item_list', type: 'customEvent', customEventFilter: [{ type: 'equals', parameter: [{ type: 'template', key: 'arg0', value: '{{_event}}' }, { type: 'template', key: 'arg1', value: 'view_item_list' }] }] },
-  { name: 'Link Click - External', type: 'linkClick', filter: [{ type: 'doesNotContain', parameter: [{ type: 'template', key: 'arg0', value: '{{Click URL}}' }, { type: 'template', key: 'arg1', value: 'corsair.fr' }] }] },
-  { name: 'Scroll 50%', type: 'scrollDepth', parameter: [{ type: 'template', key: 'verticalThresholdPercents', value: '50' }] },
+  { triggerId: 't301', name: 'All Pages', type: 'pageview' },
+  { triggerId: 't302', name: 'DOM Ready', type: 'domReady' },
+  { triggerId: 't303', name: 'Window Loaded', type: 'windowLoaded' },
+  { triggerId: 't304', name: 'DL - purchase', type: 'customEvent', customEventFilter: [{ type: 'equals', parameter: [{ type: 'template', key: 'arg0', value: '{{_event}}' }, { type: 'template', key: 'arg1', value: 'purchase' }] }] },
+  { triggerId: 't305', name: 'DL - add_to_cart', type: 'customEvent', customEventFilter: [{ type: 'equals', parameter: [{ type: 'template', key: 'arg0', value: '{{_event}}' }, { type: 'template', key: 'arg1', value: 'add_to_cart' }] }] },
+  { triggerId: 't306', name: 'DL - view_item_list', type: 'customEvent', customEventFilter: [{ type: 'equals', parameter: [{ type: 'template', key: 'arg0', value: '{{_event}}' }, { type: 'template', key: 'arg1', value: 'view_item_list' }] }] },
+  { triggerId: 't307', name: 'Link Click - External', type: 'linkClick', filter: [{ type: 'doesNotContain', parameter: [{ type: 'template', key: 'arg0', value: '{{Click URL}}' }, { type: 'template', key: 'arg1', value: 'corsair.fr' }] }] },
+  { triggerId: 't308', name: 'Scroll 50%', type: 'scrollDepth', parameter: [{ type: 'template', key: 'verticalThresholdPercents', value: '50' }] },
 ];
 
 const JS_ITEMS_NO_COUNTRY = "function() {\n  var ecom = {{DLV - ecommerce}};\n  if (!ecom || !ecom.items) return [];\n  return ecom.items.map(function(item) {\n    return {\n      item_id:       item.item_id,\n      item_name:     item.item_name,\n      item_brand:    item.item_brand    || '',\n      item_category: item.item_category || '',\n      price:         item.price,\n      quantity:      item.quantity || 1\n    };\n  });\n}";
@@ -215,9 +215,9 @@ const COR_VARIABLES: GTMVariable[] = [
 
 // ─── Iberia ────────────────────────────────────────────────────────────────────
 const IBE_TAGS: GTMTag[] = [
-  { name: 'GA4 Config — Iberia', type: 'gaawc', parameter: [{ type: 'template', key: 'measurementId', value: 'G-XXXXXXX004' }] },
+  { name: 'GA4 Config — Iberia', type: 'gaawc', firingTriggerId: ['t401'], parameter: [{ type: 'template', key: 'measurementId', value: 'G-XXXXXXX004' }] },
   {
-    name: 'GA4 — purchase', type: 'gaawe', parameter: [
+    name: 'GA4 — purchase', type: 'gaawe', firingTriggerId: ['t403'], parameter: [
       { type: 'template', key: 'measurement_id',  value: '{{GA4 ID}}' },
       { type: 'template', key: 'event_name',      value: 'purchase' },
       { type: 'template', key: 'currency',         value: '{{Constante - Currency}}' },
@@ -229,7 +229,7 @@ const IBE_TAGS: GTMTag[] = [
     ],
   },
   {
-    name: 'GA4 — view_item', type: 'gaawe', parameter: [
+    name: 'GA4 — view_item', type: 'gaawe', firingTriggerId: ['t405'], parameter: [
       { type: 'template', key: 'measurement_id', value: '{{GA4 ID}}' },
       { type: 'template', key: 'event_name',     value: 'view_item' },
       { type: 'template', key: 'currency',        value: '{{Constante - Currency}}' },
@@ -237,7 +237,7 @@ const IBE_TAGS: GTMTag[] = [
     ],
   },
   {
-    name: 'GA4 — begin_checkout', type: 'gaawe', parameter: [
+    name: 'GA4 — begin_checkout', type: 'gaawe', firingTriggerId: ['t404'], parameter: [
       { type: 'template', key: 'measurement_id', value: '{{GA4 ID}}' },
       { type: 'template', key: 'event_name',     value: 'begin_checkout' },
       { type: 'template', key: 'currency',        value: '{{Constante - Currency}}' },
@@ -251,12 +251,12 @@ const IBE_TAGS: GTMTag[] = [
 ];
 
 const IBE_TRIGGERS: GTMTrigger[] = [
-  { name: 'Pageview - All', type: 'pageview' },
-  { name: 'DOM Ready', type: 'domReady' },
-  { name: 'Event - purchase', type: 'customEvent', customEventFilter: [{ type: 'equals', parameter: [{ type: 'template', key: 'arg0', value: '{{_event}}' }, { type: 'template', key: 'arg1', value: 'purchase' }] }] },
-  { name: 'Event - begin_checkout', type: 'customEvent', customEventFilter: [{ type: 'equals', parameter: [{ type: 'template', key: 'arg0', value: '{{_event}}' }, { type: 'template', key: 'arg1', value: 'begin_checkout' }] }] },
-  { name: 'Event - view_item', type: 'customEvent', customEventFilter: [{ type: 'equals', parameter: [{ type: 'template', key: 'arg0', value: '{{_event}}' }, { type: 'template', key: 'arg1', value: 'view_item' }] }] },
-  { name: 'Click - Book Button', type: 'click', filter: [{ type: 'contains', parameter: [{ type: 'template', key: 'arg0', value: '{{Click ID}}' }, { type: 'template', key: 'arg1', value: 'book' }] }] },
+  { triggerId: 't401', name: 'Pageview - All', type: 'pageview' },
+  { triggerId: 't402', name: 'DOM Ready', type: 'domReady' },
+  { triggerId: 't403', name: 'Event - purchase', type: 'customEvent', customEventFilter: [{ type: 'equals', parameter: [{ type: 'template', key: 'arg0', value: '{{_event}}' }, { type: 'template', key: 'arg1', value: 'purchase' }] }] },
+  { triggerId: 't404', name: 'Event - begin_checkout', type: 'customEvent', customEventFilter: [{ type: 'equals', parameter: [{ type: 'template', key: 'arg0', value: '{{_event}}' }, { type: 'template', key: 'arg1', value: 'begin_checkout' }] }] },
+  { triggerId: 't405', name: 'Event - view_item', type: 'customEvent', customEventFilter: [{ type: 'equals', parameter: [{ type: 'template', key: 'arg0', value: '{{_event}}' }, { type: 'template', key: 'arg1', value: 'view_item' }] }] },
+  { triggerId: 't406', name: 'Click - Book Button', type: 'click', filter: [{ type: 'contains', parameter: [{ type: 'template', key: 'arg0', value: '{{Click ID}}' }, { type: 'template', key: 'arg1', value: 'book' }] }] },
 ];
 
 const IBE_VARIABLES: GTMVariable[] = [
@@ -271,9 +271,10 @@ const IBE_VARIABLES: GTMVariable[] = [
 
 // ─── Swiss ─────────────────────────────────────────────────────────────────────
 const SWI_TAGS: GTMTag[] = [
-  { name: 'GA4 Configuration', type: 'gaawc', parameter: [{ type: 'template', key: 'measurementId', value: 'G-XXXXXXX005' }] },
+  { name: 'GA4 Configuration', type: 'gaawc', firingTriggerId: ['t501'], parameter: [{ type: 'template', key: 'measurementId', value: 'G-XXXXXXX005' }] },
   {
-    name: 'GA4 — purchase', type: 'gaawe', parameter: [
+    // BUG intentionnel : purchase se déclenche aussi sur All Pages (t501) — à détecter avec la feature
+    name: 'GA4 — purchase', type: 'gaawe', firingTriggerId: ['t504', 't501'], parameter: [
       { type: 'template', key: 'measurement_id',  value: '{{Constante - GA4 ID}}' },
       { type: 'template', key: 'event_name',      value: 'purchase' },
       { type: 'template', key: 'currency',         value: '{{Constante - Currency}}' },
@@ -287,7 +288,7 @@ const SWI_TAGS: GTMTag[] = [
     ],
   },
   {
-    name: 'GA4 — add_to_cart', type: 'gaawe', parameter: [
+    name: 'GA4 — add_to_cart', type: 'gaawe', firingTriggerId: ['t505'], parameter: [
       { type: 'template', key: 'measurement_id', value: '{{Constante - GA4 ID}}' },
       { type: 'template', key: 'event_name',     value: 'add_to_cart' },
       { type: 'template', key: 'currency',        value: '{{Constante - Currency}}' },
@@ -298,7 +299,7 @@ const SWI_TAGS: GTMTag[] = [
     ],
   },
   {
-    name: 'GA4 — remove_from_cart', type: 'gaawe', parameter: [
+    name: 'GA4 — remove_from_cart', type: 'gaawe', firingTriggerId: ['t506'], parameter: [
       { type: 'template', key: 'measurement_id', value: '{{Constante - GA4 ID}}' },
       { type: 'template', key: 'event_name',     value: 'remove_from_cart' },
       { type: 'template', key: 'currency',        value: '{{Constante - Currency}}' },
@@ -307,7 +308,7 @@ const SWI_TAGS: GTMTag[] = [
     ],
   },
   {
-    name: 'GA4 — view_item', type: 'gaawe', parameter: [
+    name: 'GA4 — view_item', type: 'gaawe', firingTriggerId: ['t508'], parameter: [
       { type: 'template', key: 'measurement_id', value: '{{Constante - GA4 ID}}' },
       { type: 'template', key: 'event_name',     value: 'view_item' },
       { type: 'template', key: 'currency',        value: '{{Constante - Currency}}' },
@@ -316,7 +317,7 @@ const SWI_TAGS: GTMTag[] = [
     ],
   },
   {
-    name: 'GA4 — begin_checkout', type: 'gaawe', parameter: [
+    name: 'GA4 — begin_checkout', type: 'gaawe', firingTriggerId: ['t507'], parameter: [
       { type: 'template', key: 'measurement_id', value: '{{Constante - GA4 ID}}' },
       { type: 'template', key: 'event_name',     value: 'begin_checkout' },
       { type: 'template', key: 'currency',        value: '{{Constante - Currency}}' },
@@ -326,7 +327,7 @@ const SWI_TAGS: GTMTag[] = [
     ],
   },
   {
-    name: 'GA4 — search', type: 'gaawe', parameter: [
+    name: 'GA4 — search', type: 'gaawe', firingTriggerId: ['t509'], parameter: [
       { type: 'template', key: 'measurement_id', value: '{{Constante - GA4 ID}}' },
       { type: 'template', key: 'event_name',     value: 'search' },
       { type: 'template', key: 'search_term',    value: '{{DLV - search_term}}' },
@@ -338,17 +339,17 @@ const SWI_TAGS: GTMTag[] = [
 ];
 
 const SWI_TRIGGERS: GTMTrigger[] = [
-  { name: 'All Pages', type: 'pageview' },
-  { name: 'DOM Ready', type: 'domReady' },
-  { name: 'Window Loaded', type: 'windowLoaded' },
-  { name: 'DL - purchase', type: 'customEvent', customEventFilter: [{ type: 'equals', parameter: [{ type: 'template', key: 'arg0', value: '{{_event}}' }, { type: 'template', key: 'arg1', value: 'purchase' }] }] },
-  { name: 'DL - add_to_cart', type: 'customEvent', customEventFilter: [{ type: 'equals', parameter: [{ type: 'template', key: 'arg0', value: '{{_event}}' }, { type: 'template', key: 'arg1', value: 'add_to_cart' }] }] },
-  { name: 'DL - remove_from_cart', type: 'customEvent', customEventFilter: [{ type: 'equals', parameter: [{ type: 'template', key: 'arg0', value: '{{_event}}' }, { type: 'template', key: 'arg1', value: 'remove_from_cart' }] }] },
-  { name: 'DL - begin_checkout', type: 'customEvent', customEventFilter: [{ type: 'equals', parameter: [{ type: 'template', key: 'arg0', value: '{{_event}}' }, { type: 'template', key: 'arg1', value: 'begin_checkout' }] }] },
-  { name: 'DL - view_item', type: 'customEvent', customEventFilter: [{ type: 'equals', parameter: [{ type: 'template', key: 'arg0', value: '{{_event}}' }, { type: 'template', key: 'arg1', value: 'view_item' }] }] },
-  { name: 'DL - search', type: 'customEvent', customEventFilter: [{ type: 'equals', parameter: [{ type: 'template', key: 'arg0', value: '{{_event}}' }, { type: 'template', key: 'arg1', value: 'search' }] }] },
-  { name: 'Scroll 50%', type: 'scrollDepth', parameter: [{ type: 'template', key: 'verticalThresholdPercents', value: '50' }] },
-  { name: 'Scroll 90%', type: 'scrollDepth', parameter: [{ type: 'template', key: 'verticalThresholdPercents', value: '90' }] },
+  { triggerId: 't501', name: 'All Pages', type: 'pageview' },
+  { triggerId: 't502', name: 'DOM Ready', type: 'domReady' },
+  { triggerId: 't503', name: 'Window Loaded', type: 'windowLoaded' },
+  { triggerId: 't504', name: 'DL - purchase', type: 'customEvent', customEventFilter: [{ type: 'equals', parameter: [{ type: 'template', key: 'arg0', value: '{{_event}}' }, { type: 'template', key: 'arg1', value: 'purchase' }] }] },
+  { triggerId: 't505', name: 'DL - add_to_cart', type: 'customEvent', customEventFilter: [{ type: 'equals', parameter: [{ type: 'template', key: 'arg0', value: '{{_event}}' }, { type: 'template', key: 'arg1', value: 'add_to_cart' }] }] },
+  { triggerId: 't506', name: 'DL - remove_from_cart', type: 'customEvent', customEventFilter: [{ type: 'equals', parameter: [{ type: 'template', key: 'arg0', value: '{{_event}}' }, { type: 'template', key: 'arg1', value: 'remove_from_cart' }] }] },
+  { triggerId: 't507', name: 'DL - begin_checkout', type: 'customEvent', customEventFilter: [{ type: 'equals', parameter: [{ type: 'template', key: 'arg0', value: '{{_event}}' }, { type: 'template', key: 'arg1', value: 'begin_checkout' }] }] },
+  { triggerId: 't508', name: 'DL - view_item', type: 'customEvent', customEventFilter: [{ type: 'equals', parameter: [{ type: 'template', key: 'arg0', value: '{{_event}}' }, { type: 'template', key: 'arg1', value: 'view_item' }] }] },
+  { triggerId: 't509', name: 'DL - search', type: 'customEvent', customEventFilter: [{ type: 'equals', parameter: [{ type: 'template', key: 'arg0', value: '{{_event}}' }, { type: 'template', key: 'arg1', value: 'search' }] }] },
+  { triggerId: 't510', name: 'Scroll 50%', type: 'scrollDepth', parameter: [{ type: 'template', key: 'verticalThresholdPercents', value: '50' }] },
+  { triggerId: 't511', name: 'Scroll 90%', type: 'scrollDepth', parameter: [{ type: 'template', key: 'verticalThresholdPercents', value: '90' }] },
 ];
 
 const SWI_VARIABLES: GTMVariable[] = [
