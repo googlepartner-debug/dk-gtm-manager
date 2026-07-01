@@ -4,7 +4,7 @@
 
 **Description** : outil de nettoyage post-audit pour détecter les variables et triggers GTM qui ne sont utilisés dans aucun tag (triggers) ou aucun tag/trigger (variables). Interface listant les entités orphelines avec possibilité de planifier leur suppression.
 **Dépend de** : GCP OAuth pour l'exécution. Détection fonctionnelle sur mock.
-**État** : demandé, non encore implementé. À placer en onglet Monitoring ou page dédiée `/dashboard/cleaning`.
+**État** : implémenté — onglet Nettoyage (5ème onglet MonitoringPage). Queue `DeletionOperation[]` dans le store.
 
 ## Monitoring live — scan des containers réels
 

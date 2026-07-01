@@ -2,7 +2,7 @@
 
 ## Stack
 
-- **React 18 + Vite** — SPA, pas de SSR
+- **React 19 + Vite** — SPA, pas de SSR
 - **TypeScript** — strict, zéro `any`
 - **Tailwind v4** — config via `@theme` dans `src/index.css` (pas de `tailwind.config.ts`)
 - **Zustand** — store global unique `useGTMStore` + `useAuthStore`
@@ -13,11 +13,12 @@
 ```
 src/
   components/
+    containers/    — BulkRenameModal (nomenclature + find/replace, queue ContainerRenameOperation)
     diff/          — DiffView, GA4CoverageMatrix
     layout/        — Sidebar, Header
-    monitoring/    — RenameDrawer, VariableContentDrawer, ParamMatrixTab
-    packages/      — EntityDrawer
-    ui/            — Button, Badge, Combobox
+    monitoring/    — RenameDrawer, VariableContentDrawer, TagDrawer, ParamMatrixTab, CleaningTab, DistributionTab, RecommendationsTab, BulkRenameModal
+    packages/      — EntityDrawer (incl. trigger-ids-list pour tgg)
+    ui/            — Button, Badge, Combobox, DKGTMLogo, FeedbackDrawer
   data/
     gtm-static.ts       — données réelles MCP (~160 comptes, 47 containers PFS)
     gtm-entity-types.ts — définitions des types GTM avec champs de formulaire
@@ -29,16 +30,17 @@ src/
     storage.ts     — localStorage pour packages et historique
   pages/
     Dashboard.tsx      — loader initial, appel fetchAccounts
-    ContainersPage.tsx — sélection compte + containers, combobox, tri
+    ContainersPage.tsx — sélection compte + containers, combobox, tri, bulk rename
     PackagesPage.tsx   — éditeur GTM-like (tabs + drawer)
-    DeployPage.tsx     — workflow diff → matrix → deploy
-    MonitoringPage.tsx — matrice couverture cross-containers (4 onglets)
+    DeployPage.tsx     — workflow diff → matrix → deploy (nom auto, description)
+    MonitoringPage.tsx — matrice couverture cross-containers (5 onglets + QuickCreatePanel)
     HistoryPage.tsx    — historique des déploiements
+    ContextePage.tsx   — analyse container + timeline des versions
   store/
     auth-store.ts  — accessToken, user
-    gtm-store.ts   — accounts, containers, packages, diffs, deploy, pendingRenames
+    gtm-store.ts   — accounts, containers, packages, diffs, deploy, pendingRenames, pendingContainerRenames
   types/
-    gtm.ts         — tous les types GTM + DeploymentPackage + DiffEntity + RenameOperation
+    gtm.ts         — tous les types GTM + DeploymentPackage + DiffEntity + RenameOperation + TriggerOperation + DeletionOperation + ContainerRenameOperation
 ```
 
 ## Patterns clés

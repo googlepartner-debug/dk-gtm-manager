@@ -211,3 +211,39 @@ UI : sections Déclencheurs / Variables, groupement par container, checkboxes + 
 
 - Onglet Nettoyage : barre de catégories masquée (elle affichait `jsm, u, k` de l'onglet Variables précédent). `matrixKind` corrigé pour éviter `'cleaning'` comme kind de matrix.
 - SyncPlanView sort order : containers "À synchroniser" en haut, "Déjà identique" avant-dernier, "Tag absent" tout en bas. Tri basé sur `status` du diff, pas sur le booléen global `consistent`.
+
+---
+
+## 2026-07-01 — Logo DK, renommage containers, Trigger Groups, Contexte
+
+**Logo DK GTM Manager**
+
+Composant `DKGTMLogo` SVG pur (pas d'image) : "DK" en violet `#9031ff` + "GTM" + sous-titre "MANAGER" optionnel. Trois tailles (sm/md/lg), deux variantes (dark/light pour fond sombre et sidebar). Logo intégré dans la sidebar (avec produit "MANAGER"), dans la header bar (compact, sans sous-titre), et dans la landing page DKrypt-style (grande taille, variant dark, avec subtitle).
+
+La landing page a été refaite dans le style de DKrypt : fond très sombre, pills de features, carte preview fake à droite, badge "LE LAB" carreaux violet+jaune en footer.
+
+**Renommage bulk containers et comptes**
+
+Nouveau flux depuis ContainersPage : quand des containers sont sélectionnés, bouton "Renommer" apparaît. Ouvre `BulkRenameModal` avec deux modes :
+- **Nomenclature** (défaut) : pattern avec 6 tokens `{name}`, `{publicId}`, `{client}`, `{env}`, `{lang}`, `{type}`. Champs custom renseignables, aperçu en temps réel avec override manuel par ligne. Option "Inclure le compte" pour renommer aussi l'account parent.
+- **Rechercher / Remplacer** : remplacement textuel simple dans le nom existant.
+
+Les opérations sont empilées en queue Zustand (`ContainerRenameOperation[]`) avec statut pending/applied/cancelled. Panneau plan en bas de page. Exécution réelle désactivée jusqu'à GCP OAuth.
+
+**Trigger Groups (tgg)**
+
+Nouveau type de déclencheur "Groupe de déclencheurs" dans le package builder. Se déclenche quand TOUS les déclencheurs sélectionnés ont été activés sur la même page. Dans `EntityDrawer`, ce type expose un champ `trigger-ids-list` : multi-select des triggers existants du package (excluant les autres tgg). Les noms sont stockés dans les paramètres GTM (résolution en IDs réels au moment du déploiement via l'API).
+
+**Cellule absente → Créer**
+
+Dans la matrice Monitoring (onglet Tags), hovering une cellule "Absent" change l'icône × en + et le label → "Créer". Clic ouvre un `QuickCreatePanel` : tag identifié, container cible, sélecteur de package, bouton "Ajouter au package" → crée un tag stub dans le package. L'utilisateur configure paramètres et déclencheurs ensuite dans PackagesPage.
+
+**Publication — nom sans date, avec description**
+
+Le nom de version auto-généré au déploiement est maintenant simplement le nom du package (pas de date — GTM l'affiche déjà). Un champ description est ajouté sous le nom ; si laissé vide, une description structurée est générée automatiquement (`DK GTM Manager · Package: X · N entités sur M containers`).
+
+**Page Contexte**
+
+Nouvelle route `/dashboard/contexte` avec entrée dans la sidebar. Deux onglets :
+- **Analyse container** : sélecteur de container (parmi les 5 du mock), sections structurées sans grand texte — tags par catégorie avec barres de proportion, variables par type, déclencheurs, events dataLayer détectés, signaux de maturité (Consent Mode, lifetime GA4, Enhanced Conversions).
+- **Timeline des versions** : 12 versions mock sur une timeline verticale, badges colorés par technologie, avec détection sémantique d'événements (implémentation Consent Mode, migration GA4, Google Ads, Piano Analytics, Floodlight).
