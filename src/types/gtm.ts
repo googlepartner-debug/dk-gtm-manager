@@ -13,6 +13,7 @@ export interface GTMContainer {
   path: string;
   fingerprint: string;
   tagManagerUrl?: string;
+  publicationDate?: string; // ISO string from versions:live fingerprint
 }
 
 export interface GTMWorkspace {
@@ -28,6 +29,7 @@ export interface GTMWorkspace {
 export interface GTMTag {
   name: string;
   type: string;
+  tagId?: string;
   parameter?: GTMParameter[];
   firingTriggerId?: string[];
   blockingTriggerId?: string[];
@@ -39,6 +41,7 @@ export interface GTMTag {
 export interface GTMVariable {
   name: string;
   type: string;
+  variableId?: string;
   parameter?: GTMParameter[];
   notes?: string;
 }
@@ -169,7 +172,7 @@ export interface TriggerOperation {
 
 export interface DeletionOperation {
   id: string;
-  kind: 'trigger' | 'variable';
+  kind: 'trigger' | 'variable' | 'tag';
   containerId: string;
   containerName: string;
   publicId: string;
@@ -178,6 +181,41 @@ export interface DeletionOperation {
   entityId?: string;
   status: 'pending' | 'applied' | 'cancelled';
   createdAt: string;
+}
+
+// ─── Container / Account rename queue ────────────────────────────────────────
+
+export interface ContainerRenameOperation {
+  id: string;
+  kind: 'account' | 'container';
+  accountId: string;
+  accountName: string;
+  containerId?: string;   // only when kind === 'container'
+  publicId?: string;
+  oldName: string;
+  newName: string;
+  status: 'pending' | 'applied' | 'cancelled';
+  createdAt: string;
+}
+
+// ─── Event chain (GA4 audit) ──────────────────────────────────────────────────
+
+export interface EventChainStatus {
+  eventName: string;
+  containerId: string;
+  tagPresent: boolean;
+  tagName?: string;
+  triggerCount: number;
+  triggersMissing: boolean;
+  variablesTotal: number;
+  variablesMissing: string[];
+  chainScore: 0 | 1 | 2 | 3; // 0=absent 1=tag only 2=tag+trigger 3=full
+}
+
+export interface EventChainRow {
+  eventName: string;
+  containers: Record<string, EventChainStatus>;
+  coveragePercent: number; // containers with score===3 / total
 }
 
 // ─── Rename queue ──────────────────────────────────────────────────────────────

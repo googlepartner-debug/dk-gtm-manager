@@ -92,6 +92,14 @@ Containers triés par priorité : **À synchroniser** (orange, action requise) �
 - Diff ligne par ligne pour `jsm` (Custom JS) : lignes ajoutées en orange/+, lignes supprimées en rouge/−
 - Contrainte : comparaison uniquement entre variables portant le même nom exact
 
+## Filtre containers
+
+Dropdown multi-select dans le header MonitoringPage (bouton "Containers (N/N) ▾"). État partagé via `hiddenIds: Set<string>` — actif sur tous les onglets simultanément. Le dernier container actif ne peut pas être désélectionné. Violet quand filtrage actif, gris sinon.
+
+## Nettoyage — modal de confirmation
+
+Modal 640px redessinée : pills containers en header, tableau unifié par container (colonnes Type / Nom / Action), nom de version et description pré-remplis (modifiables). Bouton "Supprimer et publier" disponible en haut ET en bas de l'onglet.
+
 ## Données
 
 Actuellement sur `src/data/monitoring-mock.ts` (5 containers simulés avec écarts intentionnels).

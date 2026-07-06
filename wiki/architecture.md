@@ -37,8 +37,9 @@ src/
     HistoryPage.tsx    — historique des déploiements
     ContextePage.tsx   — analyse container + timeline des versions
   store/
-    auth-store.ts  — accessToken, user
-    gtm-store.ts   — accounts, containers, packages, diffs, deploy, pendingRenames, pendingContainerRenames
+    auth-store.ts     — accessToken, user
+    gtm-store.ts      — accounts, containers, packages, diffs, deploy, pendingRenames, pendingContainerRenames, applyPublishErrors
+    profile-store.ts  — profils nommés (Ron, Tim, Juh…), namespace localStorage par profil
   types/
     gtm.ts         — tous les types GTM + DeploymentPackage + DiffEntity + RenameOperation + TriggerOperation + DeletionOperation + ContainerRenameOperation
 ```
@@ -54,5 +55,9 @@ src/
 **Rename queue** : `pendingRenames: RenameOperation[]` dans le store Zustand. Les opérations de renommage sont empilées en mémoire et seront exécutées via l'API GTM quand GCP OAuth sera configuré.
 
 **Monitoring mock** : `monitoring-mock.ts` contient des données simulées avec écarts intentionnels pour rendre le monitoring utile sans OAuth. Remplacé par des données live dès que `listTagsFull` / `listVariablesFull` seront appelables avec token.
+
+**Profils multi-utilisateurs** : `useProfileStore` (Zustand persist) gère les profils nommés. Chaque profil a un `id` UUID et `colorIndex`. Le localStorage du monitoring est namespaced `dk_gtm_monitoring_v1_${profileId}`. Page `/profile` pour créer/gérer les profils. Le profil actif est affiché dans le header.
+
+**applyPublishErrors** : après `applyDeletions`, les erreurs de publish sont capturées dans `applyPublishErrors[]` (nom du container + message) et affichées en notification rouge dans CleaningTab.
 
 Voir [[auth-strategy]] pour le plan OAuth. Voir [[deployment-flow]] pour le workflow complet. Voir [[monitoring]] pour la logique de la page Monitoring.

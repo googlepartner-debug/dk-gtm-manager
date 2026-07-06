@@ -26,6 +26,22 @@
   --color-sidebar-bg:     hsl(220 20% 97%);
   --color-sidebar-border: hsl(220 13% 91%);
 
+  /* Vendor / platform brand colors */
+  --color-ga4:        hsl(213 94% 60%);
+  --color-ga4-dark:   hsl(213 94% 35%);
+  --color-ga4-bg:     hsl(213 94% 97%);
+  --color-hotjar:     hsl(17 100% 54%);
+  --color-abtasty:    hsl(340 82% 52%);
+  --color-meta:       hsl(221 44% 41%);
+  --color-tiktok:     hsl(180 100% 30%);
+  --color-floodlight: hsl(36 100% 50%);
+  --color-cookie:     hsl(340 82% 52%);
+  --color-dom-ready:  hsl(173 80% 36%);
+  --color-link-click: hsl(17 100% 54%);
+  --color-scroll:     hsl(221 44% 50%);
+  --color-js-custom:  hsl(46 100% 40%);
+  --color-auto-event: hsl(267 100% 59%);
+
   --radius-sm: 0.375rem;
   --radius-md: 0.5rem;
   --radius-lg: 0.625rem;
@@ -35,6 +51,26 @@
 
   --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.07), 0 1px 2px -1px rgb(0 0 0 / 0.07);
   --shadow-card-hover: 0 4px 16px -2px rgb(144 49 255 / 0.12), 0 2px 6px -2px rgb(0 0 0 / 0.08);
+
+  /* Z-index layers */
+  --z-base:    0;
+  --z-sticky:  10;
+  --z-overlay: 40;
+  --z-modal:   50;
+  --z-toast:   60;
+
+  /* Score/status tokens (utilisés dans EventsPage, DistributionTab) */
+  --color-score-0:    hsl(220 13% 78%);
+  --color-score-0-bg: hsl(220 20% 97%);
+  --color-score-1:    hsl(0 84% 60%);
+  --color-score-1-bg: hsl(0 84% 97%);
+  --color-score-2:    hsl(27 96% 55%);
+  --color-score-2-bg: hsl(27 96% 97%);
+  --color-score-3:    hsl(142 60% 40%);
+  --color-score-3-bg: hsl(142 60% 96%);
+
+  /* Spin animation helper */
+  --duration-spin: 0.75s;
 }
 
 /* ─── CSS Variables (pour usage en composants) ───────────────────────────────── */
@@ -91,6 +127,28 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .dk-fade-in-up { animation: none !important; opacity: 1; transform: none; }
   .dk-press:active { transform: none; }
+}
+
+.dk-spin {
+  animation: dk-spin var(--duration-spin, 0.75s) linear infinite;
+}
+
+/* ─── Shimmer skeleton ───────────────────────────────────────────────────────── */
+
+@keyframes dk-shimmer {
+  0%   { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+
+.dk-shimmer {
+  background: linear-gradient(
+    90deg,
+    hsl(210 40% 96%) 25%,
+    hsl(214 32% 91%) 50%,
+    hsl(210 40% 96%) 75%
+  );
+  background-size: 800px 100%;
+  animation: dk-shimmer 1.4s ease-in-out infinite;
 }
 
 /* ─── Stat card gradient ──────────────────────────────────────────────────────── */

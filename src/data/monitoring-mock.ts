@@ -13,7 +13,7 @@ export interface MonitoringContainerData {
 
 // ─── Turkish Airlines ──────────────────────────────────────────────────────────
 const TK_TAGS: GTMTag[] = [
-  { name: 'GA4 — Configuration', type: 'gaawc', firingTriggerId: ['t101'], parameter: [{ type: 'template', key: 'measurementId', value: 'G-XXXXXXX001' }] },
+  { name: 'GA4 — Configuration', type: 'gaawc', firingTriggerId: ['t101'], parameter: [{ type: 'template', key: 'measurementId', value: '{{LT - GA4 Measurement ID}}' }] },
   {
     name: 'GA4 — purchase', type: 'gaawe', firingTriggerId: ['t103'], parameter: [
       { type: 'template', key: 'measurement_id', value: '{{GA4 Measurement ID}}' },
@@ -74,6 +74,22 @@ const TK_VARIABLES: GTMVariable[] = [
   { name: 'DLV - ecommerce', type: 'v', parameter: [{ type: 'template', key: 'name', value: 'ecommerce' }] },
   { name: 'DLV - event', type: 'v', parameter: [{ type: 'template', key: 'name', value: 'event' }] },
   { name: 'Constante - GA4 ID', type: 'c', parameter: [{ type: 'template', key: 'value', value: 'G-XXXXXXX001' }] },
+  {
+    name: 'LT - GA4 Measurement ID',
+    type: 'smm',
+    parameter: [
+      { type: 'template', key: 'input', value: '{{URL - hostname}}' },
+      {
+        type: 'list',
+        key: 'map',
+        list: [
+          { type: 'map', map: [{ type: 'template', key: 'key', value: 'fr.turkishairlines.com' }, { type: 'template', key: 'value', value: 'G-TKFR001' }] },
+          { type: 'map', map: [{ type: 'template', key: 'key', value: 'www.turkishairlines.com' }, { type: 'template', key: 'value', value: 'G-TKINT001' }] },
+          { type: 'map', map: [{ type: 'template', key: 'key', value: 'de.turkishairlines.com' }, { type: 'template', key: 'value', value: 'G-TKDE001' }] },
+        ],
+      },
+    ],
+  },
   { name: 'Constante - Currency', type: 'c', parameter: [{ type: 'template', key: 'value', value: 'EUR' }] },
   { name: 'DLV - user_id', type: 'v', parameter: [{ type: 'template', key: 'name', value: 'user_id' }] },
   { name: 'DLV - page_type', type: 'v', parameter: [{ type: 'template', key: 'name', value: 'page_type' }] },
@@ -123,6 +139,8 @@ const AF_TAGS: GTMTag[] = [
   { name: 'Ads Remarketing', type: 'awct', parameter: [{ type: 'template', key: 'conversionId', value: 'AW-222222222' }] },
   { name: 'AB Tasty — Script', type: 'html', parameter: [{ type: 'template', key: 'html', value: '<script src="https://try.abtasty.com/af2024.js"></script>' }] },
   { name: 'TikTok Pixel', type: 'html', parameter: [{ type: 'template', key: 'html', value: "<!-- TikTok Pixel -->\n<script>!function (w, d, t) {ttq.load('CTXXXXXXXX');}(window, document, 'script');</script>" }] },
+  // Trace UA — script analytics.js chargé en parallèle pendant migration (oublié)
+  { name: 'UA — analytics.js fallback', type: 'html', parameter: [{ type: 'template', key: 'html', value: "<script>\n  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){\n  (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),\n  m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)\n  })(window,document,'script','https://www.google-analytics.com/analytics.js','ga');\n  ga('create', 'UA-222222-1', 'auto');\n  ga('send', 'pageview');\n</script>" }] },
 ];
 
 const AF_TRIGGERS: GTMTrigger[] = [
@@ -187,6 +205,9 @@ const COR_TAGS: GTMTag[] = [
   },
   { name: 'Kameleoon Script', type: 'html', parameter: [{ type: 'template', key: 'html', value: '<script src="https://js.kameleoon.com/kameleoon.js?siteCode=cor003"></script>' }] },
   { name: 'Hotjar', type: 'html', parameter: [{ type: 'template', key: 'html', value: "<!-- Hotjar -->\n<script>(function(h,o,t,j,a,r){h._hjSettings={hjid:3001234};})(window,document);</script>" }] },
+  {
+    name: 'Piano Analytics — Init', type: 'html', parameter: [{ type: 'template', key: 'html', value: "<script>\n  var _cb = _cb || {};\n  _cb.site = 'corsair';\n  _cb.siteId = 647382;\n  pa.setConfigurations({ site: 647382, collectDomain: 'https://logs1412.xiti.com' });\n</script>" }],
+  },
 ];
 
 const COR_TRIGGERS: GTMTrigger[] = [
@@ -248,6 +269,11 @@ const IBE_TAGS: GTMTag[] = [
   { name: 'Google Ads Conversion', type: 'awct', parameter: [{ type: 'template', key: 'conversionId', value: 'AW-333333333' }] },
   { name: 'Floodlight — IBE', type: 'flc', parameter: [{ type: 'template', key: 'advertiserId', value: '987654321' }] },
   { name: 'Meta Pixel', type: 'html', parameter: [{ type: 'template', key: 'html', value: "<!-- Meta Pixel -->\n<script>!function(f,b,e,v){fbq('init','9876543210');};</script>" }] },
+  // Trace UA — tag Universal Analytics non supprimé après migration
+  { name: 'Universal Analytics — PageView', type: 'ua', parameter: [{ type: 'template', key: 'trackingId', value: 'UA-333333-1' }, { type: 'template', key: 'trackType', value: 'TRACK_PAGEVIEW' }] },
+  {
+    name: 'Matomo — Tracking', type: 'html', parameter: [{ type: 'template', key: 'html', value: "<script>\n  var _paq = window._paq = window._paq || [];\n  _paq.push(['trackPageView']);\n  _paq.push(['enableLinkTracking']);\n  (function() {\n    var u='https://analytics.iberia.com/';\n    _paq.push(['setTrackerUrl', u+'matomo.php']);\n    _paq.push(['setSiteId', '12']);\n    var d=document, g=d.createElement('script'), s=d.getElementsByTagName('script')[0];\n    g.async=true; g.src=u+'matomo.js'; s.parentNode.insertBefore(g,s);\n  })();\n</script>" }],
+  },
 ];
 
 const IBE_TRIGGERS: GTMTrigger[] = [
@@ -267,6 +293,10 @@ const IBE_VARIABLES: GTMVariable[] = [
   { name: 'DLV - page_type', type: 'v', parameter: [{ type: 'template', key: 'name', value: 'page_type' }] },
   { name: 'Cookie - session', type: 'k', parameter: [{ type: 'template', key: 'cookieName', value: 'ibe_session' }] },
   { name: 'URL - full', type: 'u', parameter: [{ type: 'template', key: 'component', value: 'URL' }] },
+  // Trace UA — cookie _ga référencé dans une variable cookie oubliée
+  { name: 'Cookie - _ga', type: 'k', parameter: [{ type: 'template', key: 'cookieName', value: '_ga' }] },
+  // Trace UA — variable JS lisant le cookie _gid
+  { name: 'JS - UA Client ID', type: 'jsm', parameter: [{ type: 'template', key: 'javascript', value: "function() {\n  // Legacy UA client ID — à supprimer après migration GA4\n  var match = document.cookie.match(/_ga=GA1\\.\\d+\\.(.+)/);\n  return match ? match[1] : null;\n}" }] },
 ];
 
 // ─── Swiss ─────────────────────────────────────────────────────────────────────

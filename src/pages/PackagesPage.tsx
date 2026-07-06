@@ -5,6 +5,7 @@ import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { EntityDrawer } from '../components/packages/EntityDrawer';
 import { TAG_TYPES, VARIABLE_TYPES, TRIGGER_TYPES } from '../data/gtm-entity-types';
+import { PACKAGE_TEMPLATES } from '../data/package-templates';
 import type { DeploymentPackage, GTMTag, GTMVariable, GTMTrigger } from '../types/gtm';
 
 type TabKind = 'tags' | 'variables' | 'triggers';
@@ -277,10 +278,20 @@ export function PackagesPage() {
   const { packages, upsertPackage, removePackage, selectPackage } = useGTMStore();
   const navigate = useNavigate();
   const [editingPkg, setEditingPkg] = useState<DeploymentPackage | null>(null);
+  const [showTemplates, setShowTemplates] = useState(false);
 
   function openNew() {
     const pkg: DeploymentPackage = { ...EMPTY_PACKAGE, id: crypto.randomUUID(), createdAt: new Date().toISOString(), entities: { tags: [], variables: [], triggers: [] } };
     upsertPackage(pkg);
+    setEditingPkg(pkg);
+  }
+
+  function openFromTemplate(templateId: string) {
+    const tpl = PACKAGE_TEMPLATES.find((t) => t.id === templateId);
+    if (!tpl) return;
+    const pkg: DeploymentPackage = { ...tpl.template, id: crypto.randomUUID(), createdAt: new Date().toISOString() };
+    upsertPackage(pkg);
+    setShowTemplates(false);
     setEditingPkg(pkg);
   }
 
@@ -321,6 +332,13 @@ export function PackagesPage() {
               Importer JSON
             </span>
           </label>
+          <Button variant="secondary" onClick={() => setShowTemplates(true)}>
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <rect x="1" y="1" width="12" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.25"/>
+              <path d="M4 12h6M7 9v3" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round"/>
+            </svg>
+            Depuis un template
+          </Button>
           <Button onClick={openNew}>
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
               <path d="M7 1v12M1 7h12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
@@ -383,6 +401,63 @@ export function PackagesPage() {
             </div>
           ))}
         </div>
+      )}
+
+      {/* Template picker modal */}
+      {showTemplates && (
+        <>
+          <div className="fixed inset-0 z-40 flex items-center justify-center" style={{ backgroundColor: 'hsl(220 20% 10% / 0.4)' }} onClick={() => setShowTemplates(false)} />
+          <div
+            className="fixed z-50 rounded-2xl shadow-2xl"
+            style={{ top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: 480, backgroundColor: 'hsl(0 0% 100%)', border: '1px solid hsl(220 13% 91%)' }}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid hsl(220 13% 91%)' }}>
+              <div>
+                <div className="text-sm font-semibold text-foreground">Créer depuis un template</div>
+                <div className="text-xs text-muted-fg mt-0.5">Package pré-configuré, modifiable après création</div>
+              </div>
+              <button onClick={() => setShowTemplates(false)} className="w-7 h-7 flex items-center justify-center rounded-lg text-muted-fg hover:bg-muted hover:text-foreground transition-colors">
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 2l10 10M12 2L2 12" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round"/></svg>
+              </button>
+            </div>
+
+            {/* Template list */}
+            <div className="p-4 space-y-3">
+              {PACKAGE_TEMPLATES.map((tpl) => (
+                <button
+                  key={tpl.id}
+                  onClick={() => openFromTemplate(tpl.id)}
+                  className="w-full text-left p-4 rounded-xl border transition-all hover:border-primary/40 hover:bg-primary/3 group"
+                  style={{ borderColor: 'hsl(220 13% 91%)', backgroundColor: 'hsl(220 20% 98%)' }}
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 mt-0.5" style={{ background: 'linear-gradient(135deg, hsl(213 94% 60%), hsl(213 94% 40%))' }}>
+                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                        <path d="M3 4h10v2H3V4zm0 3h6v2H3V7zm0 3h8v2H3v-2z" fill="white"/>
+                      </svg>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-semibold text-foreground">{tpl.name}</span>
+                        <span className="text-xs px-1.5 py-0.5 rounded font-medium" style={{ backgroundColor: 'hsl(213 94% 60% / 0.1)', color: 'hsl(213 94% 40%)' }}>{tpl.category}</span>
+                      </div>
+                      <p className="text-xs text-muted-fg mt-1 leading-relaxed">{tpl.description}</p>
+                      <div className="flex items-center gap-3 mt-2 text-xs text-muted-fg">
+                        <span>{tpl.template.entities.tags.length} tags</span>
+                        <span>{tpl.template.entities.variables.length} variables</span>
+                        <span>{tpl.template.entities.triggers.length} déclencheurs</span>
+                      </div>
+                    </div>
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="text-muted-fg group-hover:text-primary transition-colors shrink-0 mt-1">
+                      <path d="M6 3l5 5-5 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        </>
       )}
     </div>
   );

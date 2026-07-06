@@ -44,11 +44,16 @@ export function DeployPage() {
   } = useGTMStore();
 
   const [step, setStep] = useState<Step>('select');
-  const [versionName, setVersionName] = useState(`DK Deploy ${new Date().toLocaleDateString('fr-FR')}`);
   const [diffView, setDiffView] = useState<'entities' | 'coverage'>('entities');
 
   const selectedPkg = packages.find((p) => p.id === selectedPackageId);
   const selectedContainers = containers.filter((c) => selectedContainerIds.has(c.containerId));
+
+  // Auto-generate short, explicit version name + description
+  const defaultVersionName = selectedPkg ? selectedPkg.name.slice(0, 48) : 'DK Deploy';
+
+  const [versionName, setVersionName] = useState(defaultVersionName);
+  const [versionDescription, setVersionDescription] = useState('');
   const canAnalyse = !!selectedPkg && selectedContainers.length > 0;
   const summary = globalDiffSummary();
   const hasDiff = Object.values(diffs).some((d) => d.status === 'ready');
@@ -64,7 +69,9 @@ export function DeployPage() {
   const handleDeploy = async () => {
     if (!accessToken || !selectedPackageId) return;
     setStep('progress');
-    await deploy(accessToken, selectedPackageId, versionName);
+    const desc = versionDescription.trim() ||
+      `DK GTM Manager · Package: ${selectedPkg?.name ?? ''} · ${summary.selectedCount} entités sur ${selectedContainers.length} container${selectedContainers.length > 1 ? 's' : ''}`;
+    await deploy(accessToken, selectedPackageId, versionName, desc);
     setStep('done');
   };
 
@@ -221,15 +228,32 @@ export function DeployPage() {
         {hasDiff && (
           <div className="mt-4 space-y-3">
             <div className="bg-card border border-border rounded-xl p-4 space-y-3">
-              <div>
-                <label className="block text-xs font-semibold text-muted-fg uppercase tracking-wide mb-1">
-                  Nom de la version GTM
-                </label>
-                <input
-                  className="w-full h-9 px-3 text-sm border border-border rounded-lg bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                  value={versionName}
-                  onChange={(e) => setVersionName(e.target.value)}
-                />
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs font-semibold text-muted-fg uppercase tracking-wide mb-1">
+                    Nom de la version GTM
+                    <span className="ml-1 font-normal normal-case opacity-60">— court et explicite</span>
+                  </label>
+                  <input
+                    className="w-full h-9 px-3 text-sm border border-border rounded-lg bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                    value={versionName}
+                    onChange={(e) => setVersionName(e.target.value)}
+                    placeholder={defaultVersionName}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-muted-fg uppercase tracking-wide mb-1">
+                    Description
+                    <span className="ml-1 font-normal normal-case opacity-60">— optionnelle, auto-générée si vide</span>
+                  </label>
+                  <textarea
+                    className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-primary resize-none"
+                    rows={2}
+                    value={versionDescription}
+                    onChange={(e) => setVersionDescription(e.target.value)}
+                    placeholder={`DK GTM Manager · Package: ${selectedPkg?.name ?? '—'} · ${summary.selectedCount} entités`}
+                  />
+                </div>
               </div>
               <div className="flex items-center gap-3">
                 <label className="flex items-center gap-2 cursor-pointer">

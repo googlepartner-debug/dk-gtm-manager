@@ -39,6 +39,7 @@ export function EntityDrawer({ kind, entity, availableTriggers = [], onSave, onC
   const [selectedType, setSelectedType] = useState<string>(entity?.type ?? '');
   const [form, setForm] = useState<FormValues>({});
   const [firingTriggerNames, setFiringTriggerNames] = useState<string[]>([]);
+  const [groupTriggerNames, setGroupTriggerNames] = useState<string[]>([]);
 
   useEffect(() => {
     if (entity) {
@@ -77,6 +78,17 @@ export function EntityDrawer({ kind, entity, availableTriggers = [], onSave, onC
             ],
           }];
         }
+      }
+      if (selectedType === 'tgg' && groupTriggerNames.length > 0) {
+        // Store constituent trigger names as a list parameter — resolved to IDs at deploy time
+        base.parameter = [
+          ...(base.parameter ?? []).filter((p) => p.key !== 'triggerIds'),
+          {
+            type: 'list',
+            key: 'triggerIds',
+            list: groupTriggerNames.map((n) => ({ type: 'template', key: 'triggerReference', value: n })),
+          },
+        ];
       }
       onSave(base);
     }
@@ -227,6 +239,43 @@ export function EntityDrawer({ kind, entity, availableTriggers = [], onSave, onC
                           value={(form[field.key] as { name: string; value: string }[]) ?? []}
                           onChange={(v) => setField(field.key, v)}
                         />
+                      )}
+
+                      {field.fieldType === 'trigger-ids-list' && (
+                        <div className="space-y-1">
+                          {availableTriggers.filter((t) => t.type !== 'tgg').length === 0 ? (
+                            <p className="text-xs text-muted-fg bg-muted rounded-lg px-4 py-3">
+                              Aucun déclencheur disponible — créez d'abord des déclencheurs dans ce package.
+                            </p>
+                          ) : (
+                            availableTriggers.filter((t) => t.type !== 'tgg').map((t) => {
+                              const isSel = groupTriggerNames.includes(t.name);
+                              return (
+                                <label key={t.name} className={`flex items-center gap-3 px-3 py-2 rounded-lg border cursor-pointer transition-colors ${isSel ? 'border-primary/40 bg-primary/5' : 'border-border hover:bg-muted'}`}>
+                                  <div
+                                    className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${isSel ? 'border-primary bg-primary' : 'border-border'}`}
+                                    onClick={() => setGroupTriggerNames((prev) => isSel ? prev.filter((n) => n !== t.name) : [...prev, t.name])}
+                                  >
+                                    {isSel && (
+                                      <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                                        <path d="M2 5l2 2 4-4" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                                      </svg>
+                                    )}
+                                  </div>
+                                  <div>
+                                    <span className="text-sm font-medium text-foreground">{t.name}</span>
+                                    <span className="text-xs text-muted-fg ml-2">{TRIGGER_TYPES.find((tt) => tt.id === t.type)?.label ?? t.type}</span>
+                                  </div>
+                                </label>
+                              );
+                            })
+                          )}
+                          {groupTriggerNames.length >= 2 && (
+                            <p className="text-xs mt-2" style={{ color: 'hsl(142 71% 35%)' }}>
+                              {groupTriggerNames.length} déclencheurs combinés — le groupe se déclenche uniquement quand TOUS sont actifs.
+                            </p>
+                          )}
+                        </div>
                       )}
 
                       {field.hint && (

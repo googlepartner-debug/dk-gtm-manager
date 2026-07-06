@@ -1,6 +1,6 @@
 import type { GTMParameter } from '../types/gtm';
 
-export type FieldType = 'text' | 'textarea' | 'boolean' | 'select' | 'params-list';
+export type FieldType = 'text' | 'textarea' | 'boolean' | 'select' | 'params-list' | 'trigger-ids-list';
 
 export interface FieldDef {
   key: string;
@@ -254,6 +254,22 @@ export const TRIGGER_TYPES: EntityTypeDef[] = [
         { value: 'PIXELS', label: 'Pixels' },
       ]},
       { key: 'verticalThresholds', label: 'Seuils (séparés par virgule)', fieldType: 'text', placeholder: '25,50,75,90' },
+    ],
+  },
+  {
+    id: 'tgg',
+    label: 'Groupe de déclencheurs',
+    description: 'Se déclenche quand TOUS les déclencheurs sélectionnés ont été activés sur la même page',
+    category: 'Avancé',
+    icon: 'GRP',
+    fields: [
+      {
+        key: 'triggerIds',
+        label: 'Déclencheurs à combiner',
+        fieldType: 'trigger-ids-list',
+        required: true,
+        hint: 'Tous ces déclencheurs doivent avoir été actifs pour que le groupe se déclenche',
+      },
     ],
   },
 ];

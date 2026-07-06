@@ -57,25 +57,27 @@ export function Combobox({ options, value, onChange, placeholder = 'Rechercher�
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder={placeholder}
+          aria-label={placeholder}
           className="w-full h-9 px-3 text-sm border border-primary rounded-lg bg-card text-foreground focus:outline-none ring-2 ring-primary/30"
         />
       ) : (
         <button
           type="button"
           onClick={handleOpen}
+          aria-label={selected ? `Compte sélectionné : ${selected.label}` : 'Choisir un compte'}
           className="w-full h-9 px-3 text-sm border border-border rounded-lg bg-card text-foreground text-left flex items-center justify-between hover:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/30 transition-colors"
         >
           <span className={selected ? 'text-foreground' : 'text-muted-fg'}>
             {selected ? selected.label : '— Choisir un compte —'}
           </span>
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="shrink-0 text-muted-fg">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="shrink-0 text-muted-fg" aria-hidden="true">
             <path d="M3 5l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
         </button>
       )}
 
       {open && (
-        <div className="absolute z-50 mt-1 w-full bg-card border border-border rounded-xl shadow-lg overflow-hidden">
+        <div className="absolute z-50 mt-1 w-full bg-card border border-border rounded-xl shadow-lg overflow-hidden" role="listbox">
           <div className="max-h-64 overflow-y-auto">
             {filtered.length === 0 ? (
               <div className="px-3 py-6 text-center text-sm text-muted-fg">{emptyMessage}</div>
@@ -84,6 +86,8 @@ export function Combobox({ options, value, onChange, placeholder = 'Rechercher�
                 <button
                   key={o.value}
                   type="button"
+                  role="option"
+                  aria-selected={o.value === value}
                   onClick={() => handleSelect(o.value)}
                   className={`w-full text-left px-3 py-2 text-sm transition-colors ${
                     o.value === value

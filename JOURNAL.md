@@ -247,3 +247,83 @@ Le nom de version auto-généré au déploiement est maintenant simplement le no
 Nouvelle route `/dashboard/contexte` avec entrée dans la sidebar. Deux onglets :
 - **Analyse container** : sélecteur de container (parmi les 5 du mock), sections structurées sans grand texte — tags par catégorie avec barres de proportion, variables par type, déclencheurs, events dataLayer détectés, signaux de maturité (Consent Mode, lifetime GA4, Enhanced Conversions).
 - **Timeline des versions** : 12 versions mock sur une timeline verticale, badges colorés par technologie, avec détection sémantique d'événements (implémentation Consent Mode, migration GA4, Google Ads, Piano Analytics, Floodlight).
+
+---
+
+## 2026-07-02 — GCP OAuth opérationnel
+
+**Projet GCP**
+
+Réutilisation du projet GCP `gtm-wbncv54-ngq1n` (renommé "LAB - DK GTM Manager"). Tag Manager API v2 activée. Écran de consentement OAuth configuré (externe, scopes tagmanager). Client ID OAuth créé pour Application Web avec origine `http://localhost:5173`.
+
+**Câblage OAuth dans l'app**
+
+- `.env.local` : `VITE_GOOGLE_CLIENT_ID` renseigné avec le vrai Client ID GCP
+- `src/lib/auth.ts` : ajout des scopes `openid email profile` aux scopes GTM (nécessaire pour `fetchUserInfo` sur l'endpoint userinfo Google)
+- `src/pages/Landing.tsx` : bouton branché sur `useAuthStore.login()` + feedback état chargement + affichage erreur
+- `src/App.tsx` : guards de route `RequireAuth` ajoutés — `/dashboard/*` redirige vers `/` si non connecté, `/` redirige vers `/dashboard/containers` si déjà connecté
+
+Le flow complet fonctionne : popup Google → scopes GTM → token → userinfo → dashboard. La déconnexion redirige automatiquement vers la landing via le guard.
+
+---
+
+## 2026-07-02 (suite) — Profils, nettoyage GTM live, UX monitoring
+
+**Profils multi-consultants**
+
+Problème : `googlepartner@digitalkeys.fr` est un compte Google partagé entre tous les consultants DK. Sans isolation, toutes les modifications (suppressions planifiées, containers scannés) seraient mélangées.
+
+Solution : système de profils nommés. Au premier lancement, l'utilisateur crée son profil (Ron, Tim, Juh, etc.) et y accède à chaque session. Chaque profil a son propre namespace dans localStorage (`dk_gtm_monitoring_v1_${profileId}`). Store dédié `useProfileStore` dans `src/store/profile-store.ts`. Page `/profile` pour créer/sélectionner/supprimer des profils avec codes couleurs. Le profil actif est affiché en pill colorée dans le header, cliquable pour changer d'espace de travail.
+
+Migration one-shot : au premier lancement après update, les données existantes (sans profil) sont migrées vers le profil par défaut.
+
+**Nettoyage GTM — fix historique et erreurs de publication silencieuses**
+
+Deux bugs dans le flow `applyDeletions` :
+
+1. **Historique manquant** : `saveDeploymentRecord` n'était jamais appelé. Corrigé en construisant un `DeploymentResult[]` par container affecté (avec steps DELETE → createVersion → publishVersion) et en appelant `saveDeploymentRecord` + `set({ history: loadHistory() })` à la fin.
+
+2. **Erreurs silencieuses** : `createVersion` et `publishVersion` échouaient sans notification visible (seulement `console.error`). Ajout de `applyPublishErrors: { containerName: string; error: string }[]` dans le store. Après apply, si des containers ont échoué, une notification rouge liste les noms + le premier message d'erreur (tronqué à 120 chars). L'utilisateur voit désormais "GTM API 403: …" au lieu de rien.
+
+**Photo de profil Google**
+
+Google CDN (`lh3.googleusercontent.com`) bloque les requêtes avec un header `Referer` — la photo apparaissait cassée. Fix : `referrerPolicy="no-referrer"` sur la balise `<img>` + fallback `onError` qui masque l'image et affiche l'initiale en dégradé violet si chargement échoue.
+
+**Filtre containers dans le monitoring**
+
+Ajout d'un dropdown multi-select "Containers (N/N) ▾" dans le header de MonitoringPage (avant le bouton Exporter). Active sur tous les onglets (état `hiddenIds: Set<string>` partagé). Fonctionnalités :
+- Shortcuts "Tous" et "1 seul" (garde uniquement le container cliqué)
+- Checkbox par container (nom + publicId)
+- Dernier container actif ne peut pas être désélectionné (guard `isLast`)
+- Bouton violet quand des containers sont masqués, gris sinon
+- Click-outside ferme le dropdown (useRef + useEffect)
+
+La demande initiale de chips dans le header a été rejetée — remplacée par ce dropdown.
+
+**Onglet Nettoyage — améliorations UX**
+
+- Bouton "Supprimer et publier (N)" ajouté **en haut** de l'onglet (en plus du bas) — accessible sans scroller
+- Libellé changé de "Appliquer (N)" → "Supprimer et publier (N)" partout
+- Modal de confirmation entièrement redessinée (640px, maxHeight 88vh) :
+  - Header : pills containers (nom + publicId + badge `−N` rouge)
+  - Corps : tableau unifié groupé par container — colonnes Type (badge couleur) / Nom (mono, tronqué) / Action ("Supprimé" badge rouge), alternance de fond par groupe
+  - Champs pré-remplis : nom de version auto-généré (`Nettoyage — N variables, M déclencheurs — DD mois YYYY`) et description (une ligne par container avec liste des entités)
+  - Modifiables avant confirmation
+  - Footer : résumé comptage + Annuler + "Supprimer et publier" (désactivé si nom vide)
+
+---
+
+## 2026-07-03 — Correctif dates "il y a 56 ans" dans ContainersPage
+
+**Bug fingerprint GTM — mauvaise conversion d'unité**
+
+`ContainersPage` affichait "Publié il y a 56 ans" pour tous les containers. Cause : le store convertissait le `fingerprint` GTM (timestamp Unix en **secondes**, 10 chiffres, ex. `1750123456`) en millisecondes en le **divisant par 1 000 000** au lieu de le **multiplier par 1 000**.
+
+`1750123456 / 1_000_000 = 1750 ms` → `new Date(1750)` = 1er janvier 1970 → "56 ans" ✓
+
+Certains fingerprints GTM peuvent être en nanosecondes (19 chiffres, > 1e15). Fix : détection par magnitude :
+```ts
+const ms = raw > 1e15 ? raw / 1_000_000 : raw * 1_000;
+```
+
+Corrigé dans `src/store/gtm-store.ts` ligne de la boucle d'enrichissement des dates de publication.

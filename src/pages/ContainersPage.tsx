@@ -1,53 +1,97 @@
-import { useState, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/auth-store';
 import { useGTMStore } from '../store/gtm-store';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
 import { Combobox } from '../components/ui/Combobox';
+import { BulkRenameModal } from '../components/containers/BulkRenameModal';
 
-type SortMode = 'recent' | 'name';
+type SortMode = 'api' | 'name' | 'published';
 
-function formatRelativeDate(fingerprintMs: string): string {
-  const ts = parseInt(fingerprintMs, 10);
-  if (!ts) return '';
-  const diff = Date.now() - ts;
-  const days = Math.floor(diff / 86400000);
-  if (days === 0) return "aujourd'hui";
-  if (days === 1) return 'hier';
-  if (days < 30) return `il y a ${days}j`;
-  const months = Math.floor(days / 30);
-  if (months < 12) return `il y a ${months} mois`;
-  return `il y a ${Math.floor(months / 12)} an${Math.floor(months / 12) > 1 ? 's' : ''}`;
+function formatPublicationDate(iso: string): string {
+  return new Date(iso).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
 export function ContainersPage() {
   const { accessToken } = useAuthStore();
   const {
-    accounts, selectedAccountId, selectAccount,
+    accounts, selectedAccountId, selectAccount, fetchAccounts,
     containers, selectedContainerIds, toggleContainer, selectAllContainers, clearContainerSelection,
     isLoadingAccounts, isLoadingContainers, accountError,
+    pendingContainerRenames, removeContainerRename, clearContainerRenames,
   } = useGTMStore();
 
   const navigate = useNavigate();
-  const [sortMode, setSortMode] = useState<SortMode>('recent');
-  const selectedCount = selectedContainerIds.size;
+  const [sortMode, setSortMode] = useState<SortMode>('api');
+  const [loadingMsgIdx, setLoadingMsgIdx] = useState(0);
+  const [renameModalOpen, setRenameModalOpen] = useState(false);
 
-  const sortedContainers = useMemo(() => {
-    const copy = [...containers];
-    if (sortMode === 'recent') {
-      copy.sort((a, b) => parseInt(b.fingerprint, 10) - parseInt(a.fingerprint, 10));
-    } else {
-      copy.sort((a, b) => a.name.localeCompare(b.name));
+  // Derived — déclarés avant tout usage
+  const account = accounts.find((a) => a.accountId === selectedAccountId);
+  const selectedCount = selectedContainerIds.size;
+  const selectedContainersList = containers.filter((c) => selectedContainerIds.has(c.containerId));
+
+  const LOADING_MESSAGES = [
+    `Connexion à l'API GTM…`,
+    `Récupération des containers${account ? ` de ${account.name}` : ''}…`,
+    `L'API GTM prend son café. On attend.`,
+    `Tes containers font du yoga, ils arrivent`,
+    `Voilà ! (Google avait juste besoin d'un peu d'amour)`,
+    `Google réfléchit encore… c'est un grand penseur`,
+    `On reste là, avec toi, jusqu'au bout`,
+    `Presque là. Pour de vrai cette fois.`,
+  ];
+
+  const sortedContainers = sortMode === 'name'
+    ? [...containers].sort((a, b) => a.name.localeCompare(b.name, 'fr', { sensitivity: 'base' }))
+    : sortMode === 'published'
+    ? [...containers].sort((a, b) => {
+        const ta = a.publicationDate ? new Date(a.publicationDate).getTime() : 0;
+        const tb = b.publicationDate ? new Date(b.publicationDate).getTime() : 0;
+        return tb - ta; // most recent first
+      })
+    : containers;
+
+  useEffect(() => {
+    fetchAccounts(accessToken ?? undefined);
+  }, [accessToken]);
+
+  // Auto-restore last account: if we have a selectedAccountId from a previous session
+  // but no containers loaded yet, trigger the fetch automatically
+  useEffect(() => {
+    if (selectedAccountId && containers.length === 0 && !isLoadingContainers && !isLoadingAccounts) {
+      selectAccount(selectedAccountId, accessToken ?? undefined);
     }
-    return copy;
-  }, [containers, sortMode]);
+  }, [selectedAccountId, isLoadingAccounts]);
+
+  useEffect(() => {
+    if (!isLoadingContainers) { setLoadingMsgIdx(0); return; }
+    setLoadingMsgIdx(0);
+    const intervals = [1800, 3500, 6000, 9000, 12000, 16000, 20000];
+    const timers = intervals.map((delay, i) =>
+      setTimeout(() => setLoadingMsgIdx(i + 1), delay)
+    );
+    return () => timers.forEach(clearTimeout);
+  }, [isLoadingContainers]);
 
   return (
     <div className="max-w-4xl">
-      <div className="mb-6">
-        <h1 className="text-xl font-bold text-foreground">Containers GTM</h1>
-        <p className="text-sm text-muted-fg mt-1">Sélectionnez les containers cibles pour vos déploiements.</p>
+      <div className="mb-6 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-bold text-foreground">Containers GTM</h1>
+          <p className="text-sm text-muted-fg mt-1">Sélectionnez les containers cibles pour vos déploiements.</p>
+        </div>
+        {selectedCount > 0 && (
+          <div className="flex items-center gap-3 shrink-0">
+            <span className="text-sm text-primary font-semibold">
+              {selectedCount} container{selectedCount > 1 ? 's' : ''} sélectionné{selectedCount > 1 ? 's' : ''}
+            </span>
+            <Button size="sm" onClick={() => navigate('/dashboard/deploy')}>
+              Aller au déploiement →
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* Account selector */}
@@ -58,7 +102,18 @@ export function ContainersPage() {
         {isLoadingAccounts ? (
           <div className="h-9 bg-muted animate-pulse rounded-lg" />
         ) : accountError ? (
-          <div className="text-sm text-destructive bg-destructive/10 border border-destructive/20 px-3 py-2 rounded-lg">{accountError}</div>
+          <div className="space-y-2">
+            <div className="text-sm text-destructive bg-destructive/10 border border-destructive/20 px-3 py-2 rounded-lg">
+              {accountError.includes('503') || accountError.includes('502')
+                ? "L'API GTM est temporairement indisponible (503). Réessayez dans quelques secondes."
+                : accountError}
+            </div>
+            {selectedAccountId && (
+              <Button size="sm" variant="secondary" onClick={() => selectAccount(selectedAccountId, accessToken ?? undefined)}>
+                Réessayer
+              </Button>
+            )}
+          </div>
         ) : (
           <Combobox
             options={accounts.map((a) => ({ value: a.accountId, label: a.name }))}
@@ -87,10 +142,10 @@ export function ContainersPage() {
                 <div className="flex items-center rounded-lg border border-border overflow-hidden text-xs">
                   <button
                     type="button"
-                    onClick={() => setSortMode('recent')}
-                    className={`px-2.5 py-1.5 transition-colors ${sortMode === 'recent' ? 'bg-primary text-white' : 'text-muted-fg hover:bg-muted'}`}
+                    onClick={() => setSortMode('api')}
+                    className={`px-2.5 py-1.5 transition-colors ${sortMode === 'api' ? 'bg-primary text-white' : 'text-muted-fg hover:bg-muted'}`}
                   >
-                    Dernière publication
+                    Ordre GTM
                   </button>
                   <button
                     type="button"
@@ -99,19 +154,62 @@ export function ContainersPage() {
                   >
                     A–Z
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => setSortMode('published')}
+                    className={`px-2.5 py-1.5 transition-colors border-l border-border ${sortMode === 'published' ? 'bg-primary text-white' : 'text-muted-fg hover:bg-muted'}`}
+                  >
+                    Dernière publication
+                  </button>
                 </div>
               )}
               <Button variant="ghost" size="sm" onClick={selectAllContainers}>Tout sélectionner</Button>
               {selectedCount > 0 && (
-                <Button variant="ghost" size="sm" onClick={clearContainerSelection}>Désélectionner</Button>
+                <>
+                  <Button variant="ghost" size="sm" onClick={clearContainerSelection}>Désélectionner</Button>
+                  <Button variant="secondary" size="sm" onClick={() => setRenameModalOpen(true)}>
+                    <svg width="13" height="13" viewBox="0 0 13 13" fill="none" style={{ marginRight: 4 }}>
+                      <path d="M2 9.5L9 2.5l1.5 1.5-7 7H2V9.5z" stroke="currentColor" strokeWidth="1.25" strokeLinejoin="round"/>
+                      <path d="M7.5 4l1.5 1.5" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round"/>
+                    </svg>
+                    Renommer
+                  </Button>
+                </>
               )}
             </div>
           </div>
 
           {isLoadingContainers ? (
-            <div className="p-4 space-y-2">
-              {[...Array(5)].map((_, i) => (
-                <div key={i} className="h-12 bg-muted animate-pulse rounded-lg" />
+            <div>
+              {/* Message de chargement */}
+              <div className="flex items-center gap-3 px-4 py-3 border-b border-border">
+                <svg className="shrink-0 text-primary" style={{ animation: 'dk-spin 0.8s linear infinite' }} width="14" height="14" viewBox="0 0 14 14" fill="none">
+                  <circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.5" strokeDasharray="10 8" />
+                </svg>
+                <span className="text-sm text-muted-fg transition-all duration-500">
+                  {LOADING_MESSAGES[Math.min(loadingMsgIdx, LOADING_MESSAGES.length - 1)]}
+                </span>
+              </div>
+              {/* Fausses lignes shimmer */}
+              {[
+                { nameW: 'w-48', badgeW: 'w-24' },
+                { nameW: 'w-36', badgeW: 'w-20' },
+                { nameW: 'w-56', badgeW: 'w-28' },
+                { nameW: 'w-40', badgeW: 'w-22' },
+                { nameW: 'w-52', badgeW: 'w-24' },
+                { nameW: 'w-32', badgeW: 'w-20' },
+              ].map((row, i) => (
+                <div key={i} className="flex items-center gap-3 px-4 py-3 border-b border-border last:border-0">
+                  <div className="w-4 h-4 rounded border-2 border-border shrink-0 dk-shimmer" />
+                  <div className="flex-1 space-y-1.5">
+                    <div className="flex items-center gap-2">
+                      <div className={`h-3.5 rounded-full dk-shimmer ${row.nameW}`} />
+                      <div className={`h-5 rounded-md dk-shimmer ${row.badgeW}`} />
+                    </div>
+                    <div className="h-2.5 rounded-full dk-shimmer w-24" />
+                  </div>
+                  <div className="h-3 rounded-full dk-shimmer w-16 shrink-0" />
+                </div>
               ))}
             </div>
           ) : containers.length === 0 ? (
@@ -149,9 +247,11 @@ export function ContainersPage() {
                           <Badge variant="info">server-side</Badge>
                         )}
                       </div>
-                      <div className="text-xs text-muted-fg mt-0.5">
-                        Publié {formatRelativeDate(c.fingerprint)}
-                      </div>
+                      {c.publicationDate && (
+                        <div className="text-[11px] text-muted-fg mt-0.5">
+                          Publié {formatPublicationDate(c.publicationDate)}
+                        </div>
+                      )}
                     </div>
                     <div className="text-xs text-muted-fg font-mono shrink-0">{c.containerId}</div>
                   </li>
@@ -172,6 +272,72 @@ export function ContainersPage() {
             Aller au déploiement →
           </Button>
         </div>
+      )}
+
+      {/* Rename plan */}
+      {pendingContainerRenames.length > 0 && (
+        <div className="mt-6">
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="text-sm font-semibold text-foreground">
+              Plan de renommage
+              <span className="ml-2 text-xs font-normal text-muted-fg">({pendingContainerRenames.length} opération{pendingContainerRenames.length > 1 ? 's' : ''})</span>
+            </h2>
+            <button
+              type="button"
+              onClick={clearContainerRenames}
+              className="text-xs text-muted-fg hover:text-destructive transition-colors"
+            >
+              Tout effacer
+            </button>
+          </div>
+          <div className="bg-card border border-border rounded-xl overflow-hidden">
+            <ul className="divide-y divide-border">
+              {pendingContainerRenames.map((op) => (
+                <li key={op.id} className="flex items-center gap-3 px-4 py-3">
+                  <span
+                    className="shrink-0 rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide"
+                    style={
+                      op.kind === 'account'
+                        ? { backgroundColor: 'hsl(267 100% 59% / 0.12)', color: 'hsl(267 100% 59%)' }
+                        : { backgroundColor: 'hsl(220 13% 91%)', color: 'hsl(220 13% 40%)' }
+                    }
+                  >
+                    {op.kind === 'account' ? 'Compte' : op.publicId}
+                  </span>
+                  <span className="text-sm text-muted-fg truncate max-w-[180px]">{op.oldName}</span>
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="shrink-0 text-muted-fg opacity-40">
+                    <path d="M2 7h10M8 3l4 4-4 4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                  <span className="text-sm font-medium text-foreground flex-1">{op.newName}</span>
+                  <span className="shrink-0 text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: 'hsl(220 13% 91%)', color: 'hsl(220 13% 45%)' }}>
+                    en attente
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => removeContainerRename(op.id)}
+                    className="shrink-0 p-1 rounded text-muted-fg hover:text-destructive transition-colors"
+                  >
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                      <path d="M3 3l6 6M9 3l-6 6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+                    </svg>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+          <p className="text-xs text-muted-fg mt-2">
+            Ces modifications seront appliquées via l'API GTM (OAuth requis).
+          </p>
+        </div>
+      )}
+
+      {/* Modal */}
+      {renameModalOpen && account && (
+        <BulkRenameModal
+          account={account}
+          selectedContainers={selectedContainersList}
+          onClose={() => setRenameModalOpen(false)}
+        />
       )}
     </div>
   );

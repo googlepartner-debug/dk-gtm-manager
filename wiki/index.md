@@ -9,5 +9,6 @@
 | [[design-system]] | Charte DK, tokens CSS, composants UI (Button, Badge, Combobox) |
 | [[monitoring]] | Page Monitoring — matrice couverture, renommage groupé, comparaison contenu variables |
 | [[deferred-features]] | GCP OAuth, monitoring live, usage tracking, rollback button |
+| [[profiles]] | Système de profils multi-consultants, namespace localStorage, page /profile |
 
-_Mis à jour : 2026-06-26_
+_Mis à jour : 2026-07-03_

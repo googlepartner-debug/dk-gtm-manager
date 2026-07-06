@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { clsx } from 'clsx';
 import type { MonitoringContainerData } from '../../data/monitoring-mock';
+import { getOfficialEventDef, type ParamStatus } from '../../data/official-params';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -11,9 +12,9 @@ interface ParamCell {
 
 interface ParamRow {
   paramKey: string;
-  // status for each container: present (with value), absent (tag has the param key missing), or no-tag (tag itself absent)
+  officialStatus: ParamStatus | null; // null = custom / not in GA4 spec
+  description?: string;
   cells: Record<string, ParamCell | 'absent' | 'no-tag'>;
-  // true if all *present* containers have the same value string
   consistent: boolean;
 }
 
@@ -24,17 +25,43 @@ function buildParamMatrix(
   eventName: string,
 ): ParamRow[] {
   // For each container: find the GA4 Event tag for this eventName
-  const tagPerContainer: Record<string, { tag: MonitoringContainerData['tags'][0]; containerId: string } | null> = {};
+  const tagPerContainer: Record<string, { tag: MonitoringContainerData['tags'][0] } | null> = {};
   for (const c of containers) {
     const tag = c.tags.find(
       (t) => t.type === 'gaawe' && t.parameter?.some((p) => p.key === 'event_name' && p.value === eventName),
     );
-    tagPerContainer[c.containerId] = tag ? { tag, containerId: c.containerId } : null;
+    tagPerContainer[c.containerId] = tag ? { tag } : null;
   }
 
-  // Collect all param keys across all containers for this event
-  const allKeys = new Set<string>();
-  for (const entry of Object.values(tagPerContainer)) {
+  // Reference container: the one with the most params (to avoid missing any)
+  let refParamKeys: string[] = [];
+  let maxCount = 0;
+  for (const c of containers) {
+    const entry = tagPerContainer[c.containerId];
+    if (entry) {
+      const keys = (entry.tag.parameter ?? []).map((p) => p.key).filter(Boolean) as string[];
+      if (keys.length > maxCount) {
+        maxCount = keys.length;
+        refParamKeys = keys;
+      }
+    }
+  }
+
+  // Official params for this event
+  const officialDef = getOfficialEventDef(eventName, 'ga4');
+  const officialParamMap = new Map<string, { status: ParamStatus; description?: string }>(
+    (officialDef?.params ?? []).map((p) => [p.key, { status: p.status, description: p.description }]),
+  );
+
+  // Row list = union of reference container params + official required/recommended + all container params
+  const allKeys = new Set<string>(refParamKeys);
+  for (const [key, def] of officialParamMap) {
+    if (def.status === 'required' || def.status === 'recommended') {
+      allKeys.add(key);
+    }
+  }
+  for (const c of containers) {
+    const entry = tagPerContainer[c.containerId];
     if (entry) {
       for (const p of entry.tag.parameter ?? []) {
         if (p.key) allKeys.add(p.key);
@@ -47,6 +74,7 @@ function buildParamMatrix(
   for (const key of allKeys) {
     const cells: ParamRow['cells'] = {};
     const presentValues: string[] = [];
+    const official = officialParamMap.get(key) ?? null;
 
     for (const c of containers) {
       const entry = tagPerContainer[c.containerId];
@@ -64,15 +92,25 @@ function buildParamMatrix(
     }
 
     const uniqueValues = new Set(presentValues);
-    rows.push({ paramKey: key, cells, consistent: uniqueValues.size <= 1 });
+    rows.push({
+      paramKey: key,
+      officialStatus: official?.status ?? null,
+      description: official?.description,
+      cells,
+      consistent: uniqueValues.size <= 1,
+    });
   }
 
-  // Sort: system params last, then alphabetical
+  // Sort: required → recommended → optional/custom → system
   const SYSTEM = new Set(['measurement_id', 'send_to', 'event_name']);
+  const STATUS_ORDER: Record<string, number> = { required: 0, recommended: 1, optional: 2 };
   rows.sort((a, b) => {
-    const aS = SYSTEM.has(a.paramKey) ? 1 : 0;
-    const bS = SYSTEM.has(b.paramKey) ? 1 : 0;
+    const aS = SYSTEM.has(a.paramKey) ? 99 : 0;
+    const bS = SYSTEM.has(b.paramKey) ? 99 : 0;
     if (aS !== bS) return aS - bS;
+    const aO = a.officialStatus ? (STATUS_ORDER[a.officialStatus] ?? 3) : 3;
+    const bO = b.officialStatus ? (STATUS_ORDER[b.officialStatus] ?? 3) : 3;
+    if (aO !== bO) return aO - bO;
     return a.paramKey.localeCompare(b.paramKey);
   });
 
@@ -91,7 +129,6 @@ function getUniqueEventNames(containers: MonitoringContainerData[]): string[] {
       }
     }
   }
-  // Sort: purchase first, then alpha
   const PRIORITY = ['purchase', 'begin_checkout', 'add_to_cart', 'remove_from_cart', 'view_item', 'view_item_list', 'search'];
   return [...seen].sort((a, b) => {
     const ai = PRIORITY.indexOf(a);
@@ -101,6 +138,31 @@ function getUniqueEventNames(containers: MonitoringContainerData[]): string[] {
     if (bi !== -1) return 1;
     return a.localeCompare(b);
   });
+}
+
+// ─── Official status badge ──────────────────────────────────────────────────────
+
+const STATUS_LABEL: Record<ParamStatus, string> = {
+  required: 'Requis',
+  recommended: 'Recommandé',
+  optional: 'Optionnel',
+};
+const STATUS_COLORS: Record<ParamStatus, { bg: string; color: string }> = {
+  required:    { bg: 'hsl(0 85% 96%)',   color: 'hsl(0 70% 50%)' },
+  recommended: { bg: 'hsl(38 100% 95%)', color: 'hsl(35 90% 40%)' },
+  optional:    { bg: 'hsl(220 13% 95%)', color: 'hsl(220 13% 50%)' },
+};
+
+function OfficialBadge({ status }: { status: ParamStatus }) {
+  const { bg, color } = STATUS_COLORS[status];
+  return (
+    <span
+      className="px-1.5 py-0.5 rounded text-[9px] font-semibold uppercase tracking-wide shrink-0"
+      style={{ backgroundColor: bg, color }}
+    >
+      {STATUS_LABEL[status]}
+    </span>
+  );
 }
 
 // ─── Cell component ────────────────────────────────────────────────────────────
@@ -160,20 +222,30 @@ function ContainerCoverageBadge({ rows, containerId }: { rows: ParamRow[]; conta
   const present = relevant.filter((r) => r.cells[containerId] !== 'absent');
   if (relevant.length === 0) return null;
   const pct = Math.round((present.length / relevant.length) * 100);
+  const missingRequired = rows.filter(
+    (r) => r.officialStatus === 'required' && r.cells[containerId] === 'absent',
+  ).length;
   return (
-    <div className="flex items-center gap-1 mt-0.5">
-      <div className="w-10 h-1 rounded-full overflow-hidden" style={{ backgroundColor: 'hsl(220 13% 88%)' }}>
-        <div
-          className="h-full rounded-full"
-          style={{
-            width: `${pct}%`,
-            backgroundColor: pct === 100 ? 'hsl(142 60% 45%)' : pct >= 70 ? 'hsl(46 100% 50%)' : 'hsl(0 70% 55%)',
-          }}
-        />
+    <div className="flex flex-col items-center gap-0.5 mt-0.5">
+      <div className="flex items-center gap-1">
+        <div className="w-10 h-1 rounded-full overflow-hidden" style={{ backgroundColor: 'hsl(220 13% 88%)' }}>
+          <div
+            className="h-full rounded-full"
+            style={{
+              width: `${pct}%`,
+              backgroundColor: pct === 100 ? 'hsl(142 60% 45%)' : pct >= 70 ? 'hsl(46 100% 50%)' : 'hsl(0 70% 55%)',
+            }}
+          />
+        </div>
+        <span className="text-[10px]" style={{ color: pct === 100 ? 'hsl(142 60% 35%)' : pct >= 70 ? 'hsl(35 90% 40%)' : 'hsl(0 70% 50%)' }}>
+          {pct}%
+        </span>
       </div>
-      <span className="text-[10px]" style={{ color: pct === 100 ? 'hsl(142 60% 35%)' : pct >= 70 ? 'hsl(35 90% 40%)' : 'hsl(0 70% 50%)' }}>
-        {pct}%
-      </span>
+      {missingRequired > 0 && (
+        <span className="text-[9px] font-semibold" style={{ color: 'hsl(0 70% 50%)' }}>
+          {missingRequired} requis manquant{missingRequired > 1 ? 's' : ''}
+        </span>
+      )}
     </div>
   );
 }
@@ -184,25 +256,34 @@ export function ParamMatrixTab({ containers }: { containers: MonitoringContainer
   const eventNames = useMemo(() => getUniqueEventNames(containers), [containers]);
   const [selectedEvent, setSelectedEvent] = useState(() => eventNames.includes('purchase') ? 'purchase' : eventNames[0] ?? '');
   const [search, setSearch] = useState('');
+  const [hideOptional, setHideOptional] = useState(false);
 
   const allRows = useMemo(
     () => (selectedEvent ? buildParamMatrix(containers, selectedEvent) : []),
     [containers, selectedEvent],
   );
 
-  const rows = useMemo(() => {
-    if (!search.trim()) return allRows;
-    const q = search.toLowerCase();
-    return allRows.filter((r) =>
-      r.paramKey.toLowerCase().includes(q) ||
-      Object.values(r.cells).some((c) => typeof c === 'object' && c.value.toLowerCase().includes(q)),
-    );
-  }, [allRows, search]);
-
   const SYSTEM = new Set(['measurement_id', 'send_to', 'event_name']);
+
+  const rows = useMemo(() => {
+    let r = allRows;
+    if (hideOptional) {
+      r = r.filter((row) => SYSTEM.has(row.paramKey) || row.officialStatus !== 'optional');
+    }
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      r = r.filter((row) =>
+        row.paramKey.toLowerCase().includes(q) ||
+        Object.values(row.cells).some((c) => typeof c === 'object' && c.value.toLowerCase().includes(q)),
+      );
+    }
+    return r;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allRows, search, hideOptional]);
+
   const inconsistentCount = rows.filter((r) => !r.consistent && !SYSTEM.has(r.paramKey)).length;
-  const absentCount = rows.filter((r) =>
-    Object.values(r.cells).some((c) => c === 'absent'),
+  const missingRequiredCount = rows.filter(
+    (r) => r.officialStatus === 'required' && Object.values(r.cells).some((c) => c === 'absent'),
   ).length;
 
   if (eventNames.length === 0) {
@@ -221,7 +302,7 @@ export function ParamMatrixTab({ containers }: { containers: MonitoringContainer
         style={{ borderColor: 'hsl(220 13% 91%)', backgroundColor: 'hsl(220 20% 98%)' }}
       >
         <div className="flex items-center gap-1.5 flex-wrap">
-          <span className="text-xs text-muted-fg font-medium shrink-0">Event :</span>
+          <span className="text-xs text-muted-fg font-medium shrink-0">Evénement :</span>
           {eventNames.map((ev) => (
             <button
               key={ev}
@@ -246,7 +327,16 @@ export function ParamMatrixTab({ containers }: { containers: MonitoringContainer
         <div className="flex-1" />
 
         {/* Alerts */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {missingRequiredCount > 0 && (
+            <span
+              className="flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium"
+              style={{ backgroundColor: 'hsl(0 85% 96%)', color: 'hsl(0 70% 45%)' }}
+            >
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2.5 2.5l5 5M7.5 2.5l-5 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+              {missingRequiredCount} param{missingRequiredCount > 1 ? 's' : ''} requis manquant{missingRequiredCount > 1 ? 's' : ''}
+            </span>
+          )}
           {inconsistentCount > 0 && (
             <span
               className="flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium"
@@ -256,16 +346,18 @@ export function ParamMatrixTab({ containers }: { containers: MonitoringContainer
               {inconsistentCount} valeur{inconsistentCount > 1 ? 's' : ''} incohérente{inconsistentCount > 1 ? 's' : ''}
             </span>
           )}
-          {absentCount > 0 && (
-            <span
-              className="flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium"
-              style={{ backgroundColor: 'hsl(0 85% 97%)', color: 'hsl(0 70% 50%)' }}
-            >
-              <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2.5 2.5l5 5M7.5 2.5l-5 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
-              {absentCount} param{absentCount > 1 ? 's' : ''} non envoyé{absentCount > 1 ? 's' : ''}
-            </span>
-          )}
         </div>
+
+        {/* Hide optional filter */}
+        <label className="flex items-center gap-1.5 cursor-pointer select-none text-xs text-muted-fg shrink-0">
+          <input
+            type="checkbox"
+            checked={hideOptional}
+            onChange={(e) => setHideOptional(e.target.checked)}
+            className="rounded"
+          />
+          Masquer optionnels
+        </label>
 
         {/* Search */}
         <div className="relative">
@@ -301,7 +393,7 @@ export function ParamMatrixTab({ containers }: { containers: MonitoringContainer
               <tr style={{ backgroundColor: 'hsl(220 20% 97%)' }}>
                 <th
                   className="sticky left-0 z-10 text-left px-4 py-2.5 text-xs font-semibold text-muted-fg border-b border-r"
-                  style={{ minWidth: '180px', borderColor: 'hsl(220 13% 91%)', backgroundColor: 'hsl(220 20% 97%)' }}
+                  style={{ minWidth: '220px', borderColor: 'hsl(220 13% 91%)', backgroundColor: 'hsl(220 20% 97%)' }}
                 >
                   Paramètre
                 </th>
@@ -323,16 +415,24 @@ export function ParamMatrixTab({ containers }: { containers: MonitoringContainer
             <tbody>
               {rows.map((row) => {
                 const isSystem = SYSTEM.has(row.paramKey);
+                const hasRequiredAbsent = row.officialStatus === 'required' &&
+                  Object.values(row.cells).some((c) => c === 'absent');
                 return (
                   <tr
                     key={row.paramKey}
-                    className={clsx('transition-colors', isSystem ? 'opacity-60 hover:opacity-80' : 'hover:bg-card')}
+                    className={clsx(
+                      'transition-colors',
+                      isSystem ? 'opacity-55 hover:opacity-70' : 'hover:bg-card',
+                    )}
                   >
                     <td
                       className="sticky left-0 z-10 px-4 py-2.5 border-b border-r"
-                      style={{ borderColor: 'hsl(220 13% 91%)', backgroundColor: 'white' }}
+                      style={{
+                        borderColor: 'hsl(220 13% 91%)',
+                        backgroundColor: hasRequiredAbsent ? 'hsl(0 85% 98%)' : 'white',
+                      }}
                     >
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-xs font-mono font-medium text-foreground">{row.paramKey}</span>
                         {isSystem && (
                           <span
@@ -341,6 +441,9 @@ export function ParamMatrixTab({ containers }: { containers: MonitoringContainer
                           >
                             système
                           </span>
+                        )}
+                        {!isSystem && row.officialStatus && (
+                          <OfficialBadge status={row.officialStatus} />
                         )}
                         {!row.consistent && !isSystem && (
                           <span
@@ -351,6 +454,9 @@ export function ParamMatrixTab({ containers }: { containers: MonitoringContainer
                           </span>
                         )}
                       </div>
+                      {row.description && (
+                        <p className="text-[10px] text-muted-fg mt-0.5 leading-tight">{row.description}</p>
+                      )}
                     </td>
                     {containers.map((c) => (
                       <td
@@ -371,24 +477,29 @@ export function ParamMatrixTab({ containers }: { containers: MonitoringContainer
 
       {/* Legend */}
       <div
-        className="px-6 py-2.5 border-t flex items-center gap-4 shrink-0 text-xs"
+        className="px-6 py-2.5 border-t flex items-center gap-4 shrink-0 text-xs flex-wrap"
         style={{ borderColor: 'hsl(220 13% 91%)', backgroundColor: 'hsl(220 20% 98%)', color: 'hsl(220 13% 50%)' }}
       >
         <div className="flex items-center gap-1.5">
           <div className="w-3 h-3 rounded" style={{ backgroundColor: 'hsl(142 72% 95%)', border: '1px solid hsl(142 60% 70%)' }} />
-          <span>Valeur identique sur tous les containers</span>
+          <span>Valeur identique</span>
         </div>
         <div className="flex items-center gap-1.5">
           <div className="w-3 h-3 rounded" style={{ backgroundColor: 'hsl(46 100% 94%)', border: '1px solid hsl(46 80% 70%)' }} />
-          <span>Valeurs différentes entre containers</span>
+          <span>Valeurs différentes</span>
         </div>
         <div className="flex items-center gap-1.5">
           <div className="w-3 h-3 rounded" style={{ backgroundColor: 'hsl(0 85% 97%)', border: '1px solid hsl(0 70% 80%)' }} />
-          <span>Paramètre non envoyé</span>
+          <span>Non envoyé</span>
         </div>
         <div className="flex items-center gap-1.5">
           <div className="w-3 h-3 rounded" style={{ backgroundColor: 'hsl(220 13% 95%)', border: '1px solid hsl(220 13% 80%)' }} />
-          <span>Tag absent du container</span>
+          <span>Tag absent</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <OfficialBadge status="required" />
+          <OfficialBadge status="recommended" />
+          <span>= spec officielle GA4</span>
         </div>
       </div>
     </div>
