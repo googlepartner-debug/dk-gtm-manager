@@ -327,3 +327,49 @@ const ms = raw > 1e15 ? raw / 1_000_000 : raw * 1_000;
 ```
 
 Corrigé dans `src/store/gtm-store.ts` ligne de la boucle d'enrichissement des dates de publication.
+
+---
+
+## 2026-07-06 — EventsPage, ContextePage timeline, Distribution/Recommendations, templates
+
+**Page Events — dashboard drill-down par score**
+
+Nouvelle route `/dashboard/events` (826 lignes). Vue matricielle avec trois niveaux de drill-down :
+- **Niveau 0** : liste des events GA4 avec score visuel (`ScoreDots` + `CoverageBar`) sur 4 états — Absent / Trigger manquant / Variables manquantes / Complet — calculés par container via `computeEventChain` (`src/lib/event-chain.ts`, résout aussi les alias de nom d'event avec `resolveTagEventNames`)
+- **Niveau 1** : clic sur un event → détail par déclencheur
+- **Niveau 2** : clic sur un déclencheur → détail par variable, avec queue d'actions (`actionQueue`) pour lier/créer des variables manquantes depuis un autre container source (croix rouge pour retirer une action planifiée)
+
+Légende de couleur par score en pied de page, adaptée selon le niveau de drill affiché.
+
+**ContextePage — timeline enrichie**
+
+Page Contexte étoffée (498 lignes) : onglet Timeline avec 12 versions mock (`MOCK_VERSIONS`) allant de "Création du container" (2022) à "Consent Mode v2" (2024), classification technologique par tags (GA4, Google Ads, Floodlight, Piano, OneTrust...). Onglet Analyse container inchangé dans son principe (comptages tags/variables/déclencheurs par catégorie).
+
+**Onglet Distribution (Monitoring)**
+
+`DistributionTab.tsx` (617 lignes) : diagramme de flux tag → destination par plateforme (GA4, Piano, Matomo, Google Ads, Floodlight, Kameleoon, AB Tasty, Meta Pixel, TikTok, Hotjar, Criteo, Custom). Détecte les destinations pilotées par variable (Lookup Table multi-propriété) vs valeur en dur, et le nombre d'events envoyés par config.
+
+**Onglet Recommandations (Monitoring)**
+
+`RecommendationsTab.tsx` (420 lignes) : moteur de règles générant des recommandations priorisées (critique/attention/info) par plateforme (Google Ads, GA4, Piano, Matomo) à partir des données mock — ex. détecte les triggers pageview mal utilisés, remonte l'action corrective et les containers concernés.
+
+**EventChainDrawer**
+
+`src/components/events/EventChainDrawer.tsx` : drawer affichant le détail d'un `EventChainStatus` (tag/trigger/variables) pour un container donné, avec badges ✓/✗ par étape de la chaîne.
+
+**Données et templates**
+
+- `src/data/official-params.ts` : définitions officielles des paramètres GA4/Matomo/Piano (required/recommended/optional) utilisées pour scorer les variables manquantes dans EventsPage
+- `src/data/package-templates.ts` : templates de packages prêts à l'emploi (ex. "GA4 Ecommerce Standard" — 5 events, variables DL, déclencheurs customEvent) sélectionnables depuis PackagesPage
+
+**FeedbackDrawer**
+
+`src/components/ui/FeedbackDrawer.tsx` : formulaire de retour utilisateur (catégorie feature/UX/bug/autre) qui génère un email pré-rempli (`mailto:`) plutôt qu'un backend dédié.
+
+**Skills et assets**
+
+Ajout de skills `.claude/skills/google-tagmanager` et `.claude/skills/ui-ux-pro-max`. Nouveaux assets `public/tag-types/` (logos GA4, Google Ads, Google Tag, LinkedIn, Matomo, Microsoft, Piano) pour remplacer progressivement les icônes SVG maison de `TagTypeIcon`.
+
+**Dette de documentation**
+
+Cette entrée couvre a posteriori le commit `7975908` (2026-07-06), qui regroupait plusieurs jours de travail non documentés au fur et à mesure. `CLAUDE.md` et le wiki (`auth-strategy.md`, `deferred-features.md`) ont été corrigés en même temps — ils décrivaient encore l'OAuth comme non configuré.

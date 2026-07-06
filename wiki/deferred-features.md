@@ -3,22 +3,16 @@
 ## Cleaning — variables/triggers non référencés
 
 **Description** : outil de nettoyage post-audit pour détecter les variables et triggers GTM qui ne sont utilisés dans aucun tag (triggers) ou aucun tag/trigger (variables). Interface listant les entités orphelines avec possibilité de planifier leur suppression.
-**Dépend de** : GCP OAuth pour l'exécution. Détection fonctionnelle sur mock.
-**État** : implémenté — onglet Nettoyage (5ème onglet MonitoringPage). Queue `DeletionOperation[]` dans le store.
+**État : implémenté et exécutable en live** — onglet Nettoyage (5ème onglet MonitoringPage). Queue `DeletionOperation[]` dans le store. `applyDeletions` publie réellement (DELETE → createVersion → publishVersion) depuis le 2026-07-02, avec historique de déploiement et notification d'erreurs de publication.
 
 ## Monitoring live — scan des containers réels
 
-**Description** : la page Monitoring fonctionne actuellement sur des données mock (`monitoring-mock.ts`). L'objectif est de scanner les vrais containers GTM sélectionnés pour alimenter la matrice de couverture et la comparaison de contenu.
-**Dépend de** : GCP OAuth + `listTagsFull` / `listVariablesFull` / `listTriggersFull` dans `gtm-api.ts`.
-**État actuel** : page Monitoring complète (Tags / Déclencheurs / Variables / Paramètres envoyés), renommage groupé queue, actions déclencheurs queue, comparaison de contenu Custom JS — tout fonctionnel sur mock. Bouton "Scanner" désactivé avec tooltip "GCP OAuth requis".
-**Quand** : même déblocage que GCP OAuth global. Voir [[auth-strategy]].
+**État : implémenté (2026-07 avec OAuth).** `useGTMStore.scanMonitoring(token)` scanne les vrais containers GTM par batch de `MONITORING_BATCH_SIZE = 40` (bouton "Scanner (N)" / "Scanner la suite (N)" dans MonitoringPage). `monitoring-mock.ts` reste utilisé comme données de démo/fallback quand aucun scan n'a été lancé, mais la matrice de couverture, la comparaison de contenu, le nettoyage d'orphelins et les actions déclencheurs fonctionnent désormais sur données live.
+**Reste à vérifier** : robustesse sur de très gros comptes (>40 containers), gestion d'erreurs partielles de batch.
 
 ## GCP OAuth
 
-**Pourquoi différé** : pas encore de projet GCP configuré, usage solo actuel couvert par données statiques.
-**Quand** : quand les déploiements réels seront nécessaires.
-**Ce qui bloque** : diff live, déploiement, matrice couverture GA4.
-Voir [[auth-strategy]].
+**État : opérationnel depuis le 2026-07-02.** Voir [[auth-strategy]] (mis à jour).
 
 ## Usage tracking
 
@@ -30,11 +24,11 @@ Voir [[auth-strategy]].
 ## Rollback button
 
 **Description** : dans HistoryPage, bouton pour re-déployer une version précédente sur des containers (revenir en arrière).
-**Dépend de** : GCP OAuth (nécessite API GTM live).
+**État** : pas encore implémenté. OAuth n'est plus le blocage (API GTM live disponible) — reste à construire l'UI et le flow de rollback.
 **Défini dans** : PRD v1.4.
 
 ## Workspace-level last-modified
 
 **Description** : afficher la vraie date de dernière modification (niveau workspace) plutôt que la date de dernière publication (fingerprint container). Nécessite `workspaces.list` par container.
-**Dépend de** : GCP OAuth.
+**État** : pas encore implémenté. OAuth disponible, reste à câbler l'appel `workspaces.list`.
 **Note** : le libellé "Publié" dans ContainersPage est volontairement exact — ne pas remettre "Modifié" sans avoir la vraie donnée.
