@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useEffect, Fragment } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { clsx } from 'clsx';
 import type { MonitoringContainerData } from '../data/monitoring-mock';
 import { generateMonitoringReport } from '../lib/export-monitoring';
@@ -14,6 +15,8 @@ import { BulkRenameModal, type BulkRenamePreview } from '../components/monitorin
 import { TagTypeIcon } from '../components/monitoring/TagTypeIcon';
 import { useGTMStore, MONITORING_BATCH_SIZE } from '../store/gtm-store';
 import type { GTMTag, GTMTrigger } from '../types/gtm';
+import { detectTagCategory, getTagRowKey } from '../lib/gtm-matrix';
+import { MONITORING_MOCK } from '../data/monitoring-mock';
 
 // ─── Entity kind ───────────────────────────────────────────────────────────────
 
@@ -35,6 +38,13 @@ const TAG_CATEGORIES: Record<string, CategoryConfig> = {
   'Hotjar':     { label: 'Hotjar',      color: 'var(--color-hotjar)' },
   'HTML Custom':{ label: 'HTML Custom', color: 'var(--color-muted-fg)' },
   'Legacy UA':  { label: 'Legacy UA',   color: 'hsl(27 70% 50%)' },
+  'Piano':      { label: 'Piano',       color: 'hsl(267 70% 45%)' },
+  'Matomo':     { label: 'Matomo',      color: 'hsl(142 50% 35%)' },
+  'Criteo':     { label: 'Criteo',      color: 'hsl(28 96% 45%)' },
+  'LinkedIn':   { label: 'LinkedIn',    color: 'hsl(201 100% 35%)' },
+  'Pinterest':  { label: 'Pinterest',   color: 'hsl(350 100% 45%)' },
+  'Snapchat':   { label: 'Snapchat',    color: 'hsl(54 100% 45%)' },
+  'Custom Template': { label: 'Template custom', color: 'hsl(200 15% 45%)' },
 };
 
 // Triggers
@@ -74,34 +84,8 @@ function getCategoryConfig(kind: EntityKind, type: string): CategoryConfig {
 }
 
 // ─── Category detection ────────────────────────────────────────────────────────
-
-function detectTagCategory(tag: GTMTag): string {
-  if (tag.type === 'gaawe' || tag.type === 'gaawc') return 'GA4';
-  if (tag.type === 'awct' || tag.type === 'awrk') return 'Google Ads';
-  if (tag.type === 'flc') return 'Floodlight';
-  // Legacy Universal Analytics tag type
-  if (tag.type === 'ua') return 'Legacy UA';
-  if (tag.type === 'html') {
-    const html = (tag.parameter?.find((p) => p.key === 'html')?.value ?? '').toLowerCase();
-    // Legacy UA detection in custom HTML
-    if (html.includes('analytics.js') || /ua-\d{4,}-\d+/.test(html)) return 'Legacy UA';
-    if (html.includes('kameleoon')) return 'Kameleoon';
-    if (html.includes('abtasty')) return 'AB Tasty';
-    if (html.includes("fbq(") || html.includes('facebook')) return 'Meta Pixel';
-    if (html.includes('tiktok') || html.includes('ttq.load')) return 'TikTok';
-    if (html.includes('hotjar') || html.includes('hjid')) return 'Hotjar';
-    return 'HTML Custom';
-  }
-  return 'HTML Custom';
-}
-
-function getTagRowKey(tag: GTMTag, category: string): string {
-  if (category === 'GA4' && tag.type === 'gaawe') {
-    return tag.parameter?.find((p) => p.key === 'event_name' || p.key === 'eventName')?.value ?? tag.name;
-  }
-  if (category === 'GA4' && tag.type === 'gaawc') return 'GA4 Configuration';
-  return tag.name;
-}
+// detectTagCategory / getTagRowKey now live in ../lib/gtm-matrix (shared with the store,
+// which needs the same resolution logic to apply queued trigger operations).
 
 // ─── Matrix builder ────────────────────────────────────────────────────────────
 
@@ -132,7 +116,7 @@ function buildMatrix(
       let rowKey: string;
 
       if (kind === 'tags') {
-        category = detectTagCategory(entity as GTMTag);
+        category = detectTagCategory(entity as GTMTag, container.templates);
         rowKey = getTagRowKey(entity as GTMTag, category);
       } else {
         // triggers and variables: category = type, rowKey = name
@@ -182,6 +166,8 @@ function buildMatrix(
 
   return rows;
 }
+
+// ─── Parameter formatting (for duplicate preview) ─────────────────────────────
 
 // ─── Trigger semantic comparison ──────────────────────────────────────────────
 
@@ -326,10 +312,10 @@ function MatrixTable({
 
   return (
     <table className="w-full text-sm border-collapse">
-      <thead>
+      <thead className="sticky top-0 z-20">
         <tr style={{ backgroundColor: 'hsl(220 20% 97%)' }}>
           <th
-            className="sticky left-0 z-10 text-left px-4 py-2.5 text-xs font-semibold text-muted-fg border-b border-r"
+            className="sticky left-0 top-0 z-30 text-left px-4 py-2.5 text-xs font-semibold text-muted-fg border-b border-r"
             style={{ minWidth: '220px', borderColor: 'hsl(220 13% 91%)', backgroundColor: 'hsl(220 20% 97%)' }}
           >
             <div className="flex items-center gap-2">
@@ -348,7 +334,7 @@ function MatrixTable({
             <th
               key={c.containerId}
               className="text-center px-3 py-2.5 text-xs font-semibold border-b border-r group/th"
-              style={{ minWidth: '160px', borderColor: 'hsl(220 13% 91%)', color: 'hsl(220 13% 30%)' }}
+              style={{ minWidth: '160px', borderColor: 'hsl(220 13% 91%)', color: 'hsl(220 13% 30%)', backgroundColor: 'hsl(220 20% 97%)' }}
             >
               <div className="flex flex-col items-center gap-0.5 relative">
                 <span>{c.containerName}</span>
@@ -371,7 +357,7 @@ function MatrixTable({
           {hiddenContainers.length > 0 && (
             <th
               className="text-center px-2 py-2.5 border-b"
-              style={{ minWidth: '48px', borderColor: 'hsl(220 13% 91%)' }}
+              style={{ minWidth: '48px', borderColor: 'hsl(220 13% 91%)', backgroundColor: 'hsl(220 20% 97%)' }}
             >
               <div className="relative group/add">
                 <button
@@ -410,11 +396,10 @@ function MatrixTable({
           const prevRow = rows[i - 1];
           const showCategoryHeader = !prevRow || prevRow.category !== row.category;
           const config = getCategoryConfig(kind, row.category);
-          const rowRenames = pendingRenames.filter((r) => r.rowKey === row.key && r.category === row.category);
+          const rowRenames = pendingRenames.filter((r) => r.status === 'pending' && r.rowKey === row.key && r.category === row.category);
           const presentNames = Object.values(row.cells).filter(Boolean).map((c) => c!.name);
           const hasInconsistentNames = new Set(presentNames).size > 1;
           const hasTriggerDiff = kind === 'tags' && hasTriggerVariance(row, containers);
-          const hasAnyExceptions = kind === 'tags' && Object.values(row.cells).some((c) => c?.hasExceptions);
           const isLegacy = kind === 'tags' && row.category === 'Legacy UA';
 
           return (
@@ -490,15 +475,6 @@ function MatrixTable({
                           déclencheurs variés
                         </span>
                       )}
-                      {hasAnyExceptions && (
-                        <span
-                          className="px-1 py-0.5 rounded text-[10px] font-medium"
-                          style={{ backgroundColor: 'hsl(213 94% 96%)', color: 'hsl(213 80% 40%)' }}
-                          title="Ce tag a des déclencheurs d'exception (blocking triggers)"
-                        >
-                          exceptions
-                        </span>
-                      )}
                       {isLegacy && (
                         <span
                           className="px-1 py-0.5 rounded text-[10px] font-medium"
@@ -527,7 +503,7 @@ function MatrixTable({
                 {containers.map((c) => {
                   const cell = row.cells[c.containerId];
                   const queued = pendingRenames.find(
-                    (r) => r.containerId === c.containerId && r.rowKey === row.key && r.category === row.category,
+                    (r) => r.status === 'pending' && r.containerId === c.containerId && r.rowKey === row.key && r.category === row.category,
                   );
                   return (
                     <td
@@ -592,6 +568,11 @@ function MatrixTable({
 
 function RenamePlanPanel({ onClose }: { onClose: () => void }) {
   const { pendingRenames, removeRename, clearRenames } = useGTMStore();
+  const navigate = useNavigate();
+
+  const pending = pendingRenames.filter((r) => r.status === 'pending');
+  const history = pendingRenames.filter((r) => r.status !== 'pending');
+
   return (
     <>
       <div className="fixed inset-0 z-40" style={{ backgroundColor: 'hsl(220 13% 10% / 0.35)' }} onClick={onClose} />
@@ -599,7 +580,10 @@ function RenamePlanPanel({ onClose }: { onClose: () => void }) {
         <div className="px-5 py-4 border-b flex items-center justify-between" style={{ borderColor: 'hsl(220 13% 91%)' }}>
           <div>
             <h2 className="text-sm font-semibold text-foreground">Plan de renommage</h2>
-            <p className="text-xs text-muted-fg mt-0.5">{pendingRenames.length} opération{pendingRenames.length > 1 ? 's' : ''} planifiée{pendingRenames.length > 1 ? 's' : ''}</p>
+            <p className="text-xs text-muted-fg mt-0.5">
+              {pending.length > 0 ? `${pending.length} planifiée${pending.length > 1 ? 's' : ''}` : 'Aucune opération en attente'}
+              {history.length > 0 ? ` · ${history.length} dans l'historique` : ''}
+            </p>
           </div>
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-card transition-colors text-muted-fg">
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 2l10 10M12 2L2 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
@@ -607,7 +591,7 @@ function RenamePlanPanel({ onClose }: { onClose: () => void }) {
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-2">
-          {pendingRenames.map((op) => {
+          {pending.map((op) => {
             const config = getCategoryConfig(
               op.category in TAG_CATEGORIES ? 'tags' : op.category in TRIGGER_CATEGORIES ? 'triggers' : 'variables',
               op.category,
@@ -633,26 +617,57 @@ function RenamePlanPanel({ onClose }: { onClose: () => void }) {
               </div>
             );
           })}
+
+          {history.length > 0 && (
+            <div className="space-y-2 pt-2">
+              <div className="flex items-center justify-between">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-fg">Historique</p>
+                <button onClick={() => history.forEach((op) => removeRename(op.id))} className="text-[10px] text-muted-fg hover:text-foreground underline decoration-dotted">Effacer</button>
+              </div>
+              {history.map((op) => (
+                <div key={op.id} className="flex items-start gap-3 px-3 py-2.5 rounded-lg border" style={{ borderColor: op.status === 'failed' ? 'hsl(0 70% 85%)' : 'hsl(142 60% 75%)', backgroundColor: op.status === 'failed' ? 'hsl(0 85% 98%)' : 'hsl(142 72% 97%)' }}>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <span className="text-xs font-medium text-foreground truncate">{op.containerName}</span>
+                      <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded shrink-0 font-medium" style={{ backgroundColor: op.status === 'failed' ? 'hsl(0 85% 94%)' : 'hsl(142 60% 93%)', color: op.status === 'failed' ? 'hsl(0 65% 45%)' : 'hsl(142 50% 30%)' }}>
+                        {op.status === 'failed' ? 'Échec' : 'Renommé'}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-[11px] font-mono">
+                      <span className="text-muted-fg truncate max-w-[120px]">{op.oldName}</span>
+                      <span>{'->'}</span>
+                      <span className="font-semibold truncate max-w-[120px]">{op.newName}</span>
+                    </div>
+                    {op.error && <div className="text-[10px] mt-1" style={{ color: 'hsl(0 65% 45%)' }}>{op.error}</div>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
-        <div className="px-5 py-4 border-t space-y-2" style={{ borderColor: 'hsl(220 13% 91%)' }}>
-          <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg text-xs" style={{ backgroundColor: 'hsl(267 100% 59% / 0.08)', color: 'hsl(267 80% 40%)' }}>
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="shrink-0 mt-0.5"><circle cx="6" cy="6" r="5" stroke="currentColor" strokeWidth="1"/><path d="M6 4v2.5M6 8v.25" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round"/></svg>
-            Sera exécuté via l'API GTM après configuration GCP OAuth.
+        {pending.length > 0 && (
+          <div className="px-5 py-4 border-t space-y-2" style={{ borderColor: 'hsl(220 13% 91%)' }}>
+            <p className="text-[11px] text-muted-fg">
+              Ces renommages seront publiés depuis la page <strong>Déployer</strong>, avec les autres modifications en attente pour chaque container.
+            </p>
+            <div className="flex items-center gap-2">
+              <button onClick={() => { clearRenames(); onClose(); }} className="flex-1 px-4 py-2 text-xs rounded-lg border transition-colors text-muted-fg hover:text-foreground" style={{ borderColor: 'hsl(220 13% 85%)' }}>
+                Tout effacer
+              </button>
+              <button onClick={() => { onClose(); navigate('/dashboard/deploy'); }}
+                className="flex-1 px-4 py-2 text-xs font-medium rounded-lg text-white" style={{ backgroundColor: 'hsl(267 100% 59%)' }}>
+                Aller à Déployer →
+              </button>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <button onClick={() => { clearRenames(); onClose(); }} className="flex-1 px-4 py-2 text-xs rounded-lg border transition-colors text-muted-fg hover:text-foreground" style={{ borderColor: 'hsl(220 13% 85%)' }}>
-              Tout effacer
-            </button>
-            <button disabled className="flex-1 px-4 py-2 text-xs font-medium rounded-lg text-white opacity-40 cursor-not-allowed" style={{ backgroundColor: 'hsl(267 100% 59%)' }} title="Nécessite GCP OAuth">
-              Appliquer (OAuth requis)
-            </button>
-          </div>
-        </div>
+        )}
       </div>
     </>
   );
 }
+
+// ─── Shared publishing loader ──────────────────────────────────────────────────
 
 // ─── Trigger ops panel ────────────────────────────────────────────────────────
 
@@ -664,13 +679,14 @@ function OpCard({ op, onCancel, onDelete }: {
   const isPending = op.status === 'pending';
   const isCancelled = op.status === 'cancelled';
   const isApplied = op.status === 'applied';
+  const isFailed = op.status === 'failed';
 
   return (
     <div
       className="flex items-start gap-3 px-3 py-2.5 rounded-lg border"
       style={{
-        borderColor: isPending ? 'hsl(220 13% 88%)' : isCancelled ? 'hsl(220 13% 93%)' : 'hsl(142 60% 75%)',
-        backgroundColor: isCancelled ? 'hsl(220 20% 98%)' : isApplied ? 'hsl(142 72% 97%)' : 'white',
+        borderColor: isPending ? 'hsl(220 13% 88%)' : isCancelled ? 'hsl(220 13% 93%)' : isFailed ? 'hsl(0 70% 85%)' : 'hsl(142 60% 75%)',
+        backgroundColor: isCancelled ? 'hsl(220 20% 98%)' : isApplied ? 'hsl(142 72% 97%)' : isFailed ? 'hsl(0 85% 98%)' : 'white',
         opacity: isCancelled ? 0.55 : 1,
       }}
     >
@@ -687,10 +703,10 @@ function OpCard({ op, onCancel, onDelete }: {
           {!isPending && (
             <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded shrink-0 font-medium"
               style={{
-                backgroundColor: isCancelled ? 'hsl(220 13% 91%)' : 'hsl(142 60% 93%)',
-                color: isCancelled ? 'hsl(220 13% 45%)' : 'hsl(142 50% 30%)',
+                backgroundColor: isCancelled ? 'hsl(220 13% 91%)' : isFailed ? 'hsl(0 85% 94%)' : 'hsl(142 60% 93%)',
+                color: isCancelled ? 'hsl(220 13% 45%)' : isFailed ? 'hsl(0 65% 45%)' : 'hsl(142 50% 30%)',
               }}>
-              {isCancelled ? 'Annulée' : 'Effectuée'}
+              {isCancelled ? 'Annulée' : isFailed ? 'Échec' : 'Effectuée'}
             </span>
           )}
         </div>
@@ -698,6 +714,9 @@ function OpCard({ op, onCancel, onDelete }: {
           <p className="text-[11px] font-mono mb-1" style={{ color: 'hsl(220 13% 35%)' }}>
             Retirer : {op.triggerName}
           </p>
+        )}
+        {op.error && (
+          <p className="text-[10px] mb-1" style={{ color: 'hsl(0 65% 45%)' }}>{op.error}</p>
         )}
         <div className="space-y-0.5">
           {op.steps.map((step, i) => (
@@ -734,6 +753,7 @@ function OpCard({ op, onCancel, onDelete }: {
 
 function TriggerOpsPlanPanel({ onClose }: { onClose: () => void }) {
   const { pendingTriggerOps, removeTriggerOp, cancelTriggerOp, clearTriggerOps } = useGTMStore();
+  const navigate = useNavigate();
   const pending = pendingTriggerOps.filter((op) => op.status === 'pending');
   const history = pendingTriggerOps.filter((op) => op.status !== 'pending');
 
@@ -789,31 +809,29 @@ function TriggerOpsPlanPanel({ onClose }: { onClose: () => void }) {
           )}
         </div>
 
-        <div className="px-5 py-4 border-t space-y-2" style={{ borderColor: 'hsl(220 13% 91%)' }}>
-          {pending.length > 0 && (
-            <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg text-xs" style={{ backgroundColor: 'hsl(0 70% 50% / 0.07)', color: 'hsl(0 65% 45%)' }}>
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="shrink-0 mt-0.5"><circle cx="6" cy="6" r="5" stroke="currentColor" strokeWidth="1"/><path d="M6 4v2.5M6 8v.25" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round"/></svg>
-              Sera exécuté via l'API GTM après configuration GCP OAuth.
+        {pending.length > 0 && (
+          <div className="px-5 py-4 border-t space-y-2" style={{ borderColor: 'hsl(220 13% 91%)' }}>
+            <p className="text-[11px] text-muted-fg">
+              Ces actions seront publiées depuis la page <strong>Déployer</strong>, avec les autres modifications en attente pour chaque container.
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => { clearTriggerOps(); onClose(); }}
+                className="flex-1 px-4 py-2 text-xs rounded-lg border transition-colors text-muted-fg hover:text-foreground"
+                style={{ borderColor: 'hsl(220 13% 85%)' }}
+              >
+                Tout effacer
+              </button>
+              <button
+                onClick={() => { onClose(); navigate('/dashboard/deploy'); }}
+                className="flex-1 px-4 py-2 text-xs font-medium rounded-lg text-white"
+                style={{ backgroundColor: 'hsl(0 70% 50%)' }}
+              >
+                Aller à Déployer →
+              </button>
             </div>
-          )}
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => { clearTriggerOps(); onClose(); }}
-              className="flex-1 px-4 py-2 text-xs rounded-lg border transition-colors text-muted-fg hover:text-foreground"
-              style={{ borderColor: 'hsl(220 13% 85%)' }}
-            >
-              Tout effacer
-            </button>
-            <button
-              disabled
-              className="flex-1 px-4 py-2 text-xs font-medium rounded-lg text-white opacity-40 cursor-not-allowed"
-              style={{ backgroundColor: 'hsl(0 70% 50%)' }}
-              title="Nécessite GCP OAuth"
-            >
-              Appliquer (OAuth requis)
-            </button>
           </div>
-        </div>
+        )}
       </div>
     </>
   );
@@ -869,7 +887,7 @@ export function MonitoringPage() {
   const [showTriggerOps, setShowTriggerOps] = useState(false);
   const [selectedRowKeys, setSelectedRowKeys] = useState<Set<string>>(new Set());
   const [showBulkRename, setShowBulkRename] = useState(false);
-  const [quickCreateTarget, setQuickCreateTarget] = useState<{ row: MatrixRow; containerId: string; containerName: string } | null>(null);
+  const [quickCreateTarget, setQuickCreateTarget] = useState<{ row: MatrixRow; containerId: string; containerName: string; kind: 'tags' | 'variables' } | null>(null);
   const [showContainerFilter, setShowContainerFilter] = useState(false);
   const containerFilterRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -1435,7 +1453,9 @@ export function MonitoringPage() {
               onRowClick={handleRowClick}
               onRemoveContainer={removeContainer}
               onAddContainer={addContainer}
-              onCellCreate={(row, containerId, containerName) => setQuickCreateTarget({ row, containerId, containerName })}
+              onCellCreate={(activeKind === 'tags' || activeKind === 'variables')
+                ? (row, containerId, containerName) => setQuickCreateTarget({ row, containerId, containerName, kind: activeKind })
+                : undefined}
               selectedRowKeys={selectedRowKeys}
               onToggleRow={toggleRowSelection}
               onToggleAll={toggleAllRows}
@@ -1447,9 +1467,10 @@ export function MonitoringPage() {
             style={{ borderColor: 'hsl(220 13% 91%)', backgroundColor: 'hsl(220 20% 98%)', color: 'hsl(220 13% 45%)' }}
           >
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="shrink-0"><circle cx="6" cy="6" r="5" stroke="currentColor" strokeWidth="1"/><path d="M6 4v2.5M6 8v.25" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round"/></svg>
+            {monitoringData === MONITORING_MOCK ? 'Données de démonstration · ' : ''}
             {activeKind === 'variables'
-              ? 'Données simulées · cliquez une ligne pour comparer le contenu · bouton Renommer dans le drawer'
-              : 'Données simulées · cliquez une ligne pour renommer · badge violet = plan de renommage'}
+              ? 'Cliquez une ligne pour comparer le contenu · bouton Renommer dans le drawer'
+              : 'Cliquez une ligne pour renommer · badge violet = plan de renommage'}
           </div>
         </>
       )}
@@ -1462,7 +1483,7 @@ export function MonitoringPage() {
           categoryColor={getCategoryConfig('tags', tagRow.category).color}
           cells={tagRow.cells}
           containers={containers}
-          existingRenames={pendingRenames.filter((r) => r.rowKey === tagRow.key && r.category === tagRow.category)}
+          existingRenames={pendingRenames.filter((r) => r.status === 'pending' && r.rowKey === tagRow.key && r.category === tagRow.category)}
           onSave={(ops) => addRenames(ops)}
           onClose={() => setTagRow(null)}
         />
@@ -1489,7 +1510,7 @@ export function MonitoringPage() {
           categoryColor={renameRowConfig.color}
           options={buildContainerOptions(renameRow)}
           existingRenames={pendingRenames.filter(
-            (r) => r.rowKey === renameRow.key && r.category === renameRow.category,
+            (r) => r.status === 'pending' && r.rowKey === renameRow.key && r.category === renameRow.category,
           )}
           onSave={(ops) => addRenames(ops)}
           onClose={() => setRenameRow(null)}
@@ -1518,6 +1539,8 @@ export function MonitoringPage() {
           row={quickCreateTarget.row}
           containerId={quickCreateTarget.containerId}
           containerName={quickCreateTarget.containerName}
+          kind={quickCreateTarget.kind}
+          containers={containers}
           onClose={() => setQuickCreateTarget(null)}
         />
       )}
@@ -1532,18 +1555,78 @@ function QuickCreatePanel({
   row,
   containerId,
   containerName,
+  kind,
+  containers,
   onClose,
 }: {
   row: MatrixRow;
   containerId: string;
   containerName: string;
+  kind: 'tags' | 'variables';
+  containers: MonitoringContainerData[];
   onClose: () => void;
 }) {
-  const { packages, upsertPackage } = useGTMStore();
-  const [selectedPkgId, setSelectedPkgId] = useState(packages[0]?.id ?? '');
-  void containerId;
+  const { packages, upsertPackage, addTagDuplication, addVariableDuplication } = useGTMStore();
+  const [selectedPkgId] = useState(packages[0]?.id ?? '');
+  const [selectedMissingTriggers, setSelectedMissingTriggers] = useState<Set<string>>(new Set());
 
-  const handleAdd = () => {
+  // Containers where this entity is present, usable as a duplication source
+  const referenceOptions = useMemo(
+    () => containers.filter((c) => c.containerId !== containerId && row.cells[c.containerId]),
+    [containers, containerId, row],
+  );
+  const [refContainerId, setRefContainerId] = useState(referenceOptions[0]?.containerId ?? '');
+  const refContainer = referenceOptions.find((c) => c.containerId === refContainerId) ?? null;
+  const targetContainer = containers.find((c) => c.containerId === containerId) ?? null;
+
+  const refTag = useMemo(() => {
+    if (kind !== 'tags' || !refContainer) return null;
+    const cell = row.cells[refContainer.containerId];
+    if (!cell) return null;
+    return refContainer.tags.find((t) => t.name === cell.name) ?? null;
+  }, [kind, refContainer, row]);
+
+  const refVariable = useMemo(() => {
+    if (kind !== 'variables' || !refContainer) return null;
+    const cell = row.cells[refContainer.containerId];
+    if (!cell) return null;
+    return refContainer.variables.find((v) => v.name === cell.name) ?? null;
+  }, [kind, refContainer, row]);
+
+  // Resolve reference triggers to semantically-equivalent triggers already present in the target container
+  // (tags only — variables don't fire on triggers)
+  const resolvedTriggers = useMemo(() => {
+    if (!refTag || !targetContainer) return { linked: [] as { id: string; name: string }[], missing: [] as GTMTrigger[] };
+    const refTriggerMap = new Map(refContainer!.triggers.filter((t) => t.triggerId).map((t) => [t.triggerId!, t]));
+    const targetByKey = new Map(
+      targetContainer.triggers.filter((t) => t.triggerId).map((t) => [triggerSemanticKey(t), t]),
+    );
+    const linked: { id: string; name: string }[] = [];
+    const missing: GTMTrigger[] = [];
+    for (const trId of refTag.firingTriggerId ?? []) {
+      const refTr = refTriggerMap.get(trId);
+      if (!refTr) continue;
+      const match = targetByKey.get(triggerSemanticKey(refTr));
+      if (match?.triggerId) linked.push({ id: match.triggerId, name: match.name });
+      else missing.push(refTr);
+    }
+    return { linked, missing };
+  }, [refTag, refContainer, targetContainer]);
+
+  // Default: duplicate every missing trigger too, unless the user unchecks it
+  useEffect(() => {
+    setSelectedMissingTriggers(new Set(resolvedTriggers.missing.map((t) => t.name)));
+  }, [resolvedTriggers.missing]);
+
+  function toggleMissingTrigger(name: string) {
+    setSelectedMissingTriggers((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name); else next.add(name);
+      return next;
+    });
+  }
+
+  const handleAddStub = () => {
     const pkg = packages.find((p) => p.id === selectedPkgId);
     if (!pkg) return;
     const stub: GTMTag = {
@@ -1556,49 +1639,139 @@ function QuickCreatePanel({
     onClose();
   };
 
+  function handlePlanDuplication() {
+    if (!refContainer) return;
+    if (kind === 'tags') {
+      if (!refTag) return;
+      addTagDuplication({
+        containerId,
+        containerName,
+        publicId: targetContainer?.publicId ?? '',
+        tag: {
+          name: refTag.name,
+          type: refTag.type,
+          parameter: refTag.parameter ? refTag.parameter.map((p) => ({ ...p })) : [],
+          notes: refTag.notes,
+        },
+        linkedTriggerIds: resolvedTriggers.linked.map((t) => t.id),
+        triggersToCreate: resolvedTriggers.missing.filter((t) => selectedMissingTriggers.has(t.name)),
+        sourceContainerName: refContainer.containerName,
+      });
+    } else {
+      if (!refVariable) return;
+      addVariableDuplication({
+        containerId,
+        containerName,
+        publicId: targetContainer?.publicId ?? '',
+        variable: {
+          name: refVariable.name,
+          type: refVariable.type,
+          parameter: refVariable.parameter ? refVariable.parameter.map((p) => ({ ...p })) : [],
+          notes: refVariable.notes,
+        },
+        sourceContainerName: refContainer.containerName,
+      });
+    }
+    onClose();
+  }
+
   return (
     <>
       <div className="fixed inset-0 z-40" style={{ backgroundColor: 'rgba(0,10,6,0.35)' }} onClick={onClose} />
       <div className="fixed inset-0 z-50 flex items-center justify-center">
-        <div className="bg-card border border-border rounded-xl shadow-xl p-5 flex flex-col gap-4" style={{ width: 360 }}>
+        <div className="bg-card border border-border rounded-xl shadow-xl p-5 flex flex-col gap-3.5" style={{ width: 400 }}>
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-bold text-foreground">Créer ce tag</h3>
+            <h3 className="text-sm font-bold text-foreground">{kind === 'tags' ? 'Dupliquer ce tag' : 'Dupliquer cette variable'}</h3>
             <button type="button" onClick={onClose} className="p-1 rounded text-muted-fg hover:text-foreground">
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 2l10 10M12 2L2 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
             </button>
           </div>
-          <div className="space-y-1.5 text-sm">
-            <div className="flex justify-between">
-              <span className="text-muted-fg">Tag</span>
-              <span className="font-medium text-foreground truncate ml-2">{row.category} — {row.key}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-fg">Container cible</span>
-              <span className="font-medium text-foreground">{containerName}</span>
-            </div>
-            <div className="flex justify-between items-center pt-1">
-              <span className="text-muted-fg">Package</span>
-              {packages.length === 0 ? (
-                <span className="text-xs text-destructive">Aucun package disponible</span>
-              ) : (
-                <select value={selectedPkgId} onChange={(e) => setSelectedPkgId(e.target.value)}
-                  className="text-xs rounded-lg border border-border px-2 py-1 bg-card text-foreground focus:outline-none max-w-[160px]"
-                >
-                  {packages.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                </select>
-              )}
-            </div>
+
+          {/* Entité → container, one glanceable line */}
+          <div className="flex items-center gap-2 text-xs flex-wrap">
+            <span className="font-mono font-semibold px-2 py-1 rounded-md" style={{ backgroundColor: 'hsl(220 20% 95%)', color: 'hsl(220 13% 20%)' }}>{row.category} — {row.key}</span>
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ color: 'hsl(220 13% 65%)' }}><path d="M2 6h7M6 3l3 3-3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            <span className="px-2 py-1 rounded-md font-medium" style={{ backgroundColor: 'hsl(267 100% 96%)', color: 'hsl(267 100% 40%)' }}>{containerName}</span>
           </div>
-          <p className="text-xs text-muted-fg bg-muted rounded-lg px-3 py-2">
-            Un tag stub sera ajouté au package. Configurez les paramètres et déclencheurs ensuite.
-          </p>
+
+          {referenceOptions.length > 0 ? (
+            <>
+              <div className="flex items-center gap-2 text-xs">
+                <span className="text-muted-fg shrink-0">Depuis</span>
+                <select value={refContainerId} onChange={(e) => setRefContainerId(e.target.value)}
+                  className="flex-1 rounded-lg border border-border px-2 py-1.5 bg-card text-foreground focus:outline-none text-xs font-medium"
+                >
+                  {referenceOptions.map((c) => <option key={c.containerId} value={c.containerId}>{c.containerName}</option>)}
+                </select>
+              </div>
+
+              {refTag && kind === 'tags' && (
+                <>
+                  <div className="flex items-center gap-2 text-xs text-muted-fg">
+                    <span className="font-mono text-foreground">{refTag.name}</span>
+                    <span>·</span>
+                    <span>{refTag.parameter?.length ?? 0} paramètre{(refTag.parameter?.length ?? 0) > 1 ? 's' : ''}</span>
+                  </div>
+
+                  {(resolvedTriggers.linked.length > 0 || resolvedTriggers.missing.length > 0) && (
+                    <div className="rounded-lg border divide-y" style={{ borderColor: 'hsl(220 13% 91%)' }}>
+                      {resolvedTriggers.linked.map((t) => (
+                        <div key={t.id} className="px-2.5 py-1.5 flex items-center gap-2 text-xs" style={{ borderColor: 'hsl(220 13% 91%)' }}>
+                          <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: 'hsl(142 60% 45%)' }} />
+                          <span className="font-mono text-foreground truncate">{t.name}</span>
+                          <span className="text-muted-fg ml-auto shrink-0">lié</span>
+                        </div>
+                      ))}
+                      {resolvedTriggers.missing.map((tr) => (
+                        <label key={tr.name} className="px-2.5 py-1.5 flex items-center gap-2 text-xs cursor-pointer hover:bg-[hsl(220_20%_98%)]" style={{ borderColor: 'hsl(220 13% 91%)' }}>
+                          <input
+                            type="checkbox"
+                            checked={selectedMissingTriggers.has(tr.name)}
+                            onChange={() => toggleMissingTrigger(tr.name)}
+                            className="rounded shrink-0"
+                          />
+                          <span className="font-mono text-foreground truncate">{tr.name}</span>
+                          <span className="ml-auto shrink-0" style={{ color: selectedMissingTriggers.has(tr.name) ? 'hsl(267 100% 45%)' : 'hsl(220 13% 60%)' }}>
+                            {selectedMissingTriggers.has(tr.name) ? 'à créer' : 'ignoré'}
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+
+              {refVariable && kind === 'variables' && (
+                <div className="flex items-center gap-2 text-xs text-muted-fg">
+                  <span className="font-mono text-foreground">{refVariable.name}</span>
+                  <span>({refVariable.type})</span>
+                  <span>·</span>
+                  <span>{refVariable.parameter?.length ?? 0} paramètre{(refVariable.parameter?.length ?? 0) > 1 ? 's' : ''}</span>
+                  {refVariable.type === 'smm' && (
+                    <span className="ml-auto" style={{ color: 'hsl(38 90% 45%)' }} title="Cette variable référence d'autres variables par nom — vérifie qu'elles existent aussi dans le container cible">Lookup Table</span>
+                  )}
+                </div>
+              )}
+            </>
+          ) : (
+            <p className="text-xs text-muted-fg">Aucun container de référence disponible pour {kind === 'tags' ? 'ce tag' : 'cette variable'}.</p>
+          )}
+
           <div className="flex gap-2">
             <button type="button" onClick={onClose} className="flex-1 px-3 py-2 text-xs rounded-lg border border-border text-muted-fg hover:text-foreground transition-colors">Annuler</button>
-            <button type="button" onClick={handleAdd} disabled={packages.length === 0}
-              className="flex-1 px-3 py-2 text-xs rounded-lg text-white font-semibold disabled:opacity-40"
-              style={{ backgroundColor: 'hsl(267 100% 59%)' }}
-            >Ajouter au package</button>
+            {referenceOptions.length > 0 && (
+              <button type="button" onClick={handlePlanDuplication} disabled={kind === 'tags' ? !refTag : !refVariable}
+                className="flex-1 px-3 py-2 text-xs rounded-lg text-white font-semibold disabled:opacity-40"
+                style={{ backgroundColor: 'hsl(267 100% 59%)' }}
+              >Planifier la duplication</button>
+            )}
           </div>
+          <p className="text-[11px] text-muted-fg text-center">Sera publiée depuis la page Déployer, avec les autres modifications de ce container.</p>
+          {kind === 'tags' && packages.length > 0 && (
+            <button type="button" onClick={handleAddStub} className="text-[11px] text-muted-fg hover:text-foreground underline decoration-dotted self-center">
+              ou ajouter un tag vierge à configurer dans un package
+            </button>
+          )}
         </div>
       </div>
     </>

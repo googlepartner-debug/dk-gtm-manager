@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { clsx } from 'clsx';
 import type { MonitoringContainerData } from '../../data/monitoring-mock';
 import { getOfficialEventDef, type ParamStatus } from '../../data/official-params';
+import { flattenGA4EventParams } from '../../lib/ga4-event-params';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -28,18 +29,25 @@ function buildParamMatrix(
   const tagPerContainer: Record<string, { tag: MonitoringContainerData['tags'][0] } | null> = {};
   for (const c of containers) {
     const tag = c.tags.find(
-      (t) => t.type === 'gaawe' && t.parameter?.some((p) => p.key === 'event_name' && p.value === eventName),
+      (t) => t.type === 'gaawe' && t.parameter?.some((p) => (p.key === 'event_name' || p.key === 'eventName') && p.value === eventName),
     );
     tagPerContainer[c.containerId] = tag ? { tag } : null;
+  }
+
+  // Flatten each tag's params once — "eventParameters" (currency, value, items, transaction_id…)
+  // lives nested in a LIST/MAP structure in the real GTM API, not as flat tag.parameter entries.
+  const flatParamsPerContainer: Record<string, Record<string, string>> = {};
+  for (const c of containers) {
+    const entry = tagPerContainer[c.containerId];
+    if (entry) flatParamsPerContainer[c.containerId] = flattenGA4EventParams(entry.tag);
   }
 
   // Reference container: the one with the most params (to avoid missing any)
   let refParamKeys: string[] = [];
   let maxCount = 0;
   for (const c of containers) {
-    const entry = tagPerContainer[c.containerId];
-    if (entry) {
-      const keys = (entry.tag.parameter ?? []).map((p) => p.key).filter(Boolean) as string[];
+    if (tagPerContainer[c.containerId]) {
+      const keys = Object.keys(flatParamsPerContainer[c.containerId]);
       if (keys.length > maxCount) {
         maxCount = keys.length;
         refParamKeys = keys;
@@ -61,11 +69,8 @@ function buildParamMatrix(
     }
   }
   for (const c of containers) {
-    const entry = tagPerContainer[c.containerId];
-    if (entry) {
-      for (const p of entry.tag.parameter ?? []) {
-        if (p.key) allKeys.add(p.key);
-      }
+    if (tagPerContainer[c.containerId]) {
+      for (const key of Object.keys(flatParamsPerContainer[c.containerId])) allKeys.add(key);
     }
   }
 
@@ -81,10 +86,10 @@ function buildParamMatrix(
       if (!entry) {
         cells[c.containerId] = 'no-tag';
       } else {
-        const param = entry.tag.parameter?.find((p) => p.key === key);
-        if (param?.value !== undefined) {
-          cells[c.containerId] = { value: param.value, tagName: entry.tag.name };
-          presentValues.push(param.value);
+        const value = flatParamsPerContainer[c.containerId][key];
+        if (value !== undefined) {
+          cells[c.containerId] = { value, tagName: entry.tag.name };
+          presentValues.push(value);
         } else {
           cells[c.containerId] = 'absent';
         }
@@ -102,7 +107,7 @@ function buildParamMatrix(
   }
 
   // Sort: required → recommended → optional/custom → system
-  const SYSTEM = new Set(['measurement_id', 'send_to', 'event_name']);
+  const SYSTEM = new Set(['measurement_id', 'measurementId', 'send_to', 'sendTo', 'event_name', 'eventName']);
   const STATUS_ORDER: Record<string, number> = { required: 0, recommended: 1, optional: 2 };
   rows.sort((a, b) => {
     const aS = SYSTEM.has(a.paramKey) ? 99 : 0;
@@ -124,7 +129,7 @@ function getUniqueEventNames(containers: MonitoringContainerData[]): string[] {
   for (const c of containers) {
     for (const tag of c.tags) {
       if (tag.type === 'gaawe') {
-        const ev = tag.parameter?.find((p) => p.key === 'event_name')?.value;
+        const ev = tag.parameter?.find((p) => p.key === 'event_name' || p.key === 'eventName')?.value;
         if (ev) seen.add(ev);
       }
     }
@@ -263,7 +268,7 @@ export function ParamMatrixTab({ containers }: { containers: MonitoringContainer
     [containers, selectedEvent],
   );
 
-  const SYSTEM = new Set(['measurement_id', 'send_to', 'event_name']);
+  const SYSTEM = new Set(['measurement_id', 'measurementId', 'send_to', 'sendTo', 'event_name', 'eventName']);
 
   const rows = useMemo(() => {
     let r = allRows;

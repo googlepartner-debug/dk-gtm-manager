@@ -2,20 +2,24 @@ import { create } from 'zustand';
 import type {
   GTMAccount, GTMContainer, DeploymentPackage, DeploymentRecord, DeploymentResult,
   ContainerDiff, DiffEntity, GlobalDiffSummary, RenameOperation, TriggerOperation, DeletionOperation,
-  ContainerRenameOperation,
+  ContainerRenameOperation, GTMTag, GTMTrigger, GTMVariable, TagDuplicationOperation, VariableDuplicationOperation,
 } from '../types/gtm';
+import { findTagByRowKey } from '../lib/gtm-matrix';
 import { STATIC_ACCOUNTS, STATIC_CONTAINERS } from '../data/gtm-static';
 import {
   listAccounts, listContainers, getLiveVersion, createWorkspace,
   createTag, updateTag, listTagsFull, deleteTag,
   createVariable, updateVariable, listVariablesFull, deleteVariable,
   createTrigger, updateTrigger, listTriggersFull, deleteTrigger,
+  listTemplates, listGtagConfig,
   createVersion, publishVersion,
-  getDefaultWorkspace,
+  getDefaultWorkspace, listWorkspaces, getWorkspaceStatus,
+  updateContainer, updateAccount,
+  listVersionHeaders, getVersion, type GTMVersionHeader, type GTMVersionContent,
 } from '../lib/gtm-api';
 import type { MonitoringContainerData } from '../data/monitoring-mock';
 import { MONITORING_MOCK } from '../data/monitoring-mock';
-import { computeContainerDiff } from '../lib/gtm-diff';
+import { computeContainerDiff, diffVersions } from '../lib/gtm-diff';
 import { computeEventChain as computeEventChainFn } from '../lib/event-chain';
 import type { EventChainRow } from '../types/gtm';
 import { loadPackages, savePackage, deletePackage, loadHistory, saveDeploymentRecord } from '../lib/storage';
@@ -75,6 +79,8 @@ type PersistedOps = {
   pendingRenames: RenameOperation[];
   pendingTriggerOps: TriggerOperation[];
   pendingContainerRenames: ContainerRenameOperation[];
+  pendingTagDuplications: TagDuplicationOperation[];
+  pendingVariableDuplications: VariableDuplicationOperation[];
 };
 
 const _persistedMonitoring = tryParse<MonitoringContainerData[]>(
@@ -83,7 +89,7 @@ const _persistedMonitoring = tryParse<MonitoringContainerData[]>(
 
 const _persistedOps = tryParse<PersistedOps>(
   localStorage.getItem(OPS_PERSIST_KEY),
-  { pendingDeletions: [], pendingRenames: [], pendingTriggerOps: [], pendingContainerRenames: [] },
+  { pendingDeletions: [], pendingRenames: [], pendingTriggerOps: [], pendingContainerRenames: [], pendingTagDuplications: [], pendingVariableDuplications: [] },
 );
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -132,6 +138,12 @@ interface GTMStore {
   // Container / Account rename queue
   pendingContainerRenames: ContainerRenameOperation[];
 
+  // Tag duplication queue
+  pendingTagDuplications: TagDuplicationOperation[];
+
+  // Variable duplication queue
+  pendingVariableDuplications: VariableDuplicationOperation[];
+
   // Active consultant profile
   activeProfileId: string | null;
 
@@ -173,18 +185,37 @@ interface GTMStore {
   resetDiffs: () => void;
   globalDiffSummary: () => GlobalDiffSummary;
 
+  // Actions — version diff (Chantier A : comparer deux versions d'un container pilote,
+  // isoler le delta exact, en faire un nouveau package prêt à déployer ailleurs)
+  versionHeaders: GTMVersionHeader[];
+  isLoadingVersionHeaders: boolean;
+  loadVersionHeaders: (token: string, containerId: string) => Promise<void>;
+  versionDiffEntities: DiffEntity[] | null;
+  isDiffingVersions: boolean;
+  versionDiffError: string | null;
+  computeVersionDiff: (
+    token: string,
+    containerId: string,
+    beforeVersionId: string,
+    afterVersionId: string,
+  ) => Promise<void>;
+  toggleVersionDiffEntity: (key: string) => void;
+  selectAllVersionDiffEntities: () => void;
+  clearVersionDiff: () => void;
+  createPackageFromVersionDiff: (name: string, client?: string) => string; // returns new package id
+
   // Actions — deploy
   setAutoPublish: (v: boolean) => void;
   deploy: (token: string, packageId: string, versionName: string, versionDescription?: string) => Promise<void>;
   loadHistory: () => void;
   resetDeployment: () => void;
 
-  // Actions — renames
+  // Actions — renames (queued here, published from Déployer via applyContainerQueue)
   addRenames: (ops: Omit<RenameOperation, 'id' | 'status' | 'createdAt'>[]) => void;
   removeRename: (id: string) => void;
   clearRenames: () => void;
 
-  // Actions — trigger ops
+  // Actions — trigger ops (queued here, published from Déployer via applyContainerQueue)
   addTriggerOp: (op: Omit<TriggerOperation, 'id' | 'status' | 'createdAt'>) => void;
   removeTriggerOp: (id: string) => void;
   cancelTriggerOp: (id: string) => void;
@@ -199,14 +230,98 @@ interface GTMStore {
   clearDeletions: () => void;
   applyDeletions: (token: string, opts: { versionName: string; description: string }) => Promise<void>;
 
+  // Actions — duplicate tag from a reference container
+  isDuplicatingTag: boolean;
+  // Step 1 (optional) — write the tag into a BLANK workspace (existing empty one, or a newly
+  // created one — never the shared Default Workspace, which may hold other consultants'
+  // unrelated pending edits). Visible immediately in the GTM UI, reviewable before going live.
+  writeTagDraft: (
+    token: string,
+    opts: { containerId: string; tag: GTMTag; linkedTriggerIds?: string[]; triggersToCreate?: GTMTrigger[] },
+  ) => Promise<{ success: boolean; tagId?: string; workspaceId?: string; error?: string }>;
+  // Step 2 — create a version from the given workspace's state and publish it.
+  publishWorkspaceVersion: (
+    token: string,
+    opts: { containerId: string; workspaceId: string; versionName: string; description: string; label?: string },
+  ) => Promise<{ success: boolean; error?: string }>;
+  // Convenience — does step 1 + step 2 in one call (create tag, then version + publish)
+  duplicateTagToContainer: (
+    token: string,
+    opts: { containerId: string; tag: GTMTag; linkedTriggerIds?: string[]; triggersToCreate?: GTMTrigger[]; versionName: string; description: string },
+  ) => Promise<{ success: boolean; error?: string }>;
+
   // Actions — container/account renames
   addContainerRenames: (ops: Omit<ContainerRenameOperation, 'id' | 'status' | 'createdAt'>[]) => void;
   removeContainerRename: (id: string) => void;
   clearContainerRenames: () => void;
+  isApplyingContainerRenames: boolean;
+  applyContainerRenames: (token: string) => Promise<void>;
+
+  // Actions — tag duplication queue (staged, published from Déployer alongside renames/trigger ops)
+  addTagDuplication: (op: Omit<TagDuplicationOperation, 'id' | 'status' | 'createdAt'>) => void;
+  removeTagDuplication: (id: string) => void;
+  clearTagDuplications: () => void;
+
+  // Actions — variable duplication queue (same pattern as tags)
+  addVariableDuplication: (op: Omit<VariableDuplicationOperation, 'id' | 'status' | 'createdAt'>) => void;
+  removeVariableDuplication: (id: string) => void;
+  clearVariableDuplications: () => void;
+
+  // Self-healing: compares every pending rename/duplication/trigger-removal against the latest
+  // scanned monitoringData and auto-marks anything already reflected in reality as 'applied' —
+  // e.g. a rename done manually in GTM, or a queued op published earlier that never got cleared.
+  // Runs automatically after every scan and on session load, so "planifié" never lies.
+  reconcilePendingOps: () => void;
+
+  // Unified per-container publish — combines pending renames + trigger ops + tag duplications
+  // for ONE container into a single blank workspace + one version + one publish. This is the
+  // only place these three queues get applied (Déployer page), so a container never ends up
+  // with three separate versions for what the user sees as one review-then-publish action.
+  isApplyingContainerQueue: boolean;
+  applyContainerQueue: (
+    token: string,
+    containerId: string,
+    opts: { versionName: string; description: string },
+  ) => Promise<{ success: boolean; error?: string }>;
 
   // Event chain (GA4 audit)
   eventChainRows: EventChainRow[];
   computeEventChain: () => void;
+}
+
+// Finds a workspace with zero pending changes ("blank"), or creates a new one.
+// Never returns the Default Workspace on the assumption it's dirty — it's shared across
+// consultants on this account and may hold unrelated, unpublished edits from someone else.
+async function resolveBlankWorkspace(
+  token: string,
+  accountId: string,
+  containerId: string,
+  label: string,
+): Promise<{ workspaceId: string } | { error: string }> {
+  try {
+    const workspaces = await listWorkspaces(token, accountId, containerId);
+    for (const ws of workspaces) {
+      try {
+        const status = await getWorkspaceStatus(token, accountId, containerId, ws.workspaceId);
+        if (!status.workspaceChange || status.workspaceChange.length === 0) {
+          return { workspaceId: ws.workspaceId };
+        }
+      } catch {
+        // Can't verify this one's status — skip it, try the next.
+      }
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { error: `Impossible de lister les workspaces existants : ${msg}` };
+  }
+
+  try {
+    const ws = await createWorkspace(token, accountId, containerId, label, 'Créé automatiquement par DK GTM Manager — workspace vierge pour cette opération');
+    return { workspaceId: ws.workspaceId };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { error: `Aucun workspace vierge disponible et impossible d'en créer un nouveau (limite GTM atteinte ?) : ${msg}` };
+  }
 }
 
 export const useGTMStore = create<GTMStore>((set, get) => ({
@@ -245,8 +360,11 @@ export const useGTMStore = create<GTMStore>((set, get) => ({
   pendingTriggerOps: _persistedOps.pendingTriggerOps,
   pendingDeletions: _persistedOps.pendingDeletions,
   isApplyingDeletions: false,
+  isDuplicatingTag: false,
   applyPublishErrors: [],
   pendingContainerRenames: _persistedOps.pendingContainerRenames,
+  pendingTagDuplications: _persistedOps.pendingTagDuplications ?? [],
+  pendingVariableDuplications: _persistedOps.pendingVariableDuplications ?? [],
 
   eventChainRows: computeEventChainFn(_persistedMonitoring),
   computeEventChain: () => {
@@ -294,7 +412,7 @@ export const useGTMStore = create<GTMStore>((set, get) => ({
       // Enrich with real publication dates — batched 8/600ms to stay under GTM quota (60/10s)
       if (get().selectedAccountId === accountId && !get()._abortDateEnrichment) {
         const BATCH = 8;
-        const all: ({ fingerprint?: string } | null)[] = new Array(containers.length).fill(null);
+        const all: (GTMVersionContent | null)[] = new Array(containers.length).fill(null);
         for (let i = 0; i < containers.length; i += BATCH) {
           if (get().selectedAccountId !== accountId || get()._abortDateEnrichment) break;
           const chunk = containers.slice(i, i + BATCH);
@@ -464,6 +582,80 @@ export const useGTMStore = create<GTMStore>((set, get) => ({
     };
   },
 
+  // ─── Version diff (Chantier A) ─────────────────────────────────────────────
+
+  versionHeaders: [],
+  isLoadingVersionHeaders: false,
+  loadVersionHeaders: async (token, containerId) => {
+    const { selectedAccountId } = get();
+    if (!selectedAccountId) return;
+    set({ isLoadingVersionHeaders: true, versionHeaders: [] });
+    try {
+      const headers = await listVersionHeaders(token, selectedAccountId, containerId);
+      set({ versionHeaders: headers });
+    } finally {
+      set({ isLoadingVersionHeaders: false });
+    }
+  },
+
+  versionDiffEntities: null,
+  isDiffingVersions: false,
+  versionDiffError: null,
+  computeVersionDiff: async (token, containerId, beforeVersionId, afterVersionId) => {
+    const { selectedAccountId } = get();
+    if (!selectedAccountId) return;
+    set({ isDiffingVersions: true, versionDiffError: null, versionDiffEntities: null });
+    try {
+      const [before, after] = await Promise.all([
+        getVersion(token, selectedAccountId, containerId, beforeVersionId),
+        getVersion(token, selectedAccountId, containerId, afterVersionId),
+      ]);
+      const entities = diffVersions(before, after);
+      set({ versionDiffEntities: entities });
+    } catch (err) {
+      set({ versionDiffError: err instanceof Error ? err.message : String(err) });
+    } finally {
+      set({ isDiffingVersions: false });
+    }
+  },
+
+  toggleVersionDiffEntity: (key) => {
+    set((state) => ({
+      versionDiffEntities: state.versionDiffEntities?.map((e) => e.key === key ? { ...e, selected: !e.selected } : e) ?? null,
+    }));
+  },
+
+  selectAllVersionDiffEntities: () => {
+    set((state) => ({
+      versionDiffEntities: state.versionDiffEntities?.map((e) => ({ ...e, selected: true })) ?? null,
+    }));
+  },
+
+  clearVersionDiff: () => set({ versionDiffEntities: null, versionDiffError: null, versionHeaders: [] }),
+
+  createPackageFromVersionDiff: (name, client) => {
+    const entities = get().versionDiffEntities ?? [];
+    // 'removed' entities are informational only — the package format can only create/update,
+    // it has no delete semantics. Including one here would re-create the "before" definition,
+    // the opposite of a deletion. Propagating a removal is a separate, explicit action (out of
+    // scope here) — e.g. via Nettoyage on the target containers.
+    const selected = entities.filter((e) => e.selected && e.status !== 'removed');
+    const id = crypto.randomUUID();
+    const pkg: DeploymentPackage = {
+      id,
+      name,
+      client: client ?? '',
+      createdAt: new Date().toISOString(),
+      entities: {
+        tags: selected.filter((e) => e.kind === 'tag').map((e) => e.proposed as GTMTag),
+        variables: selected.filter((e) => e.kind === 'variable').map((e) => e.proposed as GTMVariable),
+        triggers: selected.filter((e) => e.kind === 'trigger').map((e) => e.proposed as GTMTrigger),
+      },
+    };
+    get().upsertPackage(pkg);
+    return id;
+  },
+
   // ─── Deploy (upsert) ────────────────────────────────────────────────────────
 
   setAutoPublish: (v) => set({ autoPublish: v }),
@@ -609,13 +801,21 @@ export const useGTMStore = create<GTMStore>((set, get) => ({
   resetDeployment: () => set({ deploymentResults: [], deploymentProgress: 0 }),
 
   addRenames: (ops) => {
-    const newOps: RenameOperation[] = ops.map((op) => ({
-      ...op,
-      id: crypto.randomUUID(),
-      status: 'pending',
-      createdAt: new Date().toISOString(),
-    }));
-    set((state) => ({ pendingRenames: [...state.pendingRenames, ...newOps] }));
+    set((state) => {
+      // Skip anything that duplicates an already-pending rename for the same entity —
+      // otherwise re-queuing the same rename twice leaves a stale "planifié" ghost behind
+      // once the first copy gets published.
+      const isDuplicate = (op: typeof ops[number]) => state.pendingRenames.some((r) =>
+        r.status === 'pending' && r.containerId === op.containerId && r.oldName === op.oldName && r.newName === op.newName,
+      );
+      const newOps: RenameOperation[] = ops.filter((op) => !isDuplicate(op)).map((op) => ({
+        ...op,
+        id: crypto.randomUUID(),
+        status: 'pending',
+        createdAt: new Date().toISOString(),
+      }));
+      return { pendingRenames: [...state.pendingRenames, ...newOps] };
+    });
   },
 
   removeRename: (id) =>
@@ -624,13 +824,26 @@ export const useGTMStore = create<GTMStore>((set, get) => ({
   clearRenames: () => set({ pendingRenames: [] }),
 
   addTriggerOp: (op) => {
-    const newOp: TriggerOperation = {
-      ...op,
-      id: crypto.randomUUID(),
-      status: 'pending',
-      createdAt: new Date().toISOString(),
-    };
-    set((state) => ({ pendingTriggerOps: [...state.pendingTriggerOps, newOp] }));
+    set((state) => {
+      // Same guard as addRenames — avoid a stale duplicate lingering after the first copy is published.
+      const containerIds = op.steps.map((s) => s.containerId).sort().join(',');
+      const isDuplicate = state.pendingTriggerOps.some((existing) =>
+        existing.status === 'pending' &&
+        existing.kind === op.kind &&
+        existing.tagRowKey === op.tagRowKey &&
+        existing.tagCategory === op.tagCategory &&
+        existing.triggerName === op.triggerName &&
+        existing.steps.map((s) => s.containerId).sort().join(',') === containerIds,
+      );
+      if (isDuplicate) return state;
+      const newOp: TriggerOperation = {
+        ...op,
+        id: crypto.randomUUID(),
+        status: 'pending',
+        createdAt: new Date().toISOString(),
+      };
+      return { pendingTriggerOps: [...state.pendingTriggerOps, newOp] };
+    });
   },
 
   removeTriggerOp: (id) =>
@@ -787,6 +1000,457 @@ export const useGTMStore = create<GTMStore>((set, get) => ({
     }
   },
 
+  writeTagDraft: async (token, { containerId, tag, linkedTriggerIds = [], triggersToCreate = [] }) => {
+    const { selectedAccountId, monitoringData } = get();
+    const meta = monitoringData.find((d) => d.containerId === containerId);
+    if (!selectedAccountId || !meta) return { success: false, error: 'Container introuvable dans les données scannées' };
+
+    set({ isDuplicatingTag: true, applyPublishErrors: [] });
+    try {
+      const blank = await resolveBlankWorkspace(token, selectedAccountId, containerId, `DK Duplication — ${tag.name}`);
+      if ('error' in blank) {
+        set({ applyPublishErrors: [{ containerName: meta.containerName, error: blank.error }] });
+        return { success: false, error: blank.error };
+      }
+
+      const createdTriggerIds: string[] = [];
+      const createdTriggers: GTMTrigger[] = [];
+      for (const tr of triggersToCreate) {
+        // Whitelist only the fields a trigger CREATE accepts. `tr` comes from a live scan and
+        // carries extra read-only API fields (accountId, containerId, workspaceId, fingerprint,
+        // path, tagManagerUrl...) — sending those back causes a 400 Bad Request.
+        const clone: GTMTrigger = {
+          name: tr.name,
+          type: tr.type,
+          ...(tr.filter ? { filter: tr.filter.map((f) => ({ ...f, parameter: f.parameter.map((p) => ({ ...p })) })) } : {}),
+          ...(tr.customEventFilter ? { customEventFilter: tr.customEventFilter.map((f) => ({ ...f, parameter: f.parameter.map((p) => ({ ...p })) })) } : {}),
+          ...(tr.parameter ? { parameter: tr.parameter.map((p) => ({ ...p })) } : {}),
+          ...(tr.notes ? { notes: tr.notes } : {}),
+        };
+        try {
+          const createdTr = (await createTrigger(token, selectedAccountId, containerId, blank.workspaceId, clone as never)) as { triggerId?: string };
+          if (createdTr.triggerId) {
+            createdTriggerIds.push(createdTr.triggerId);
+            createdTriggers.push({ ...tr, triggerId: createdTr.triggerId });
+          }
+        } catch (err) {
+          const errMsg = err instanceof Error ? err.message : String(err);
+          set({ applyPublishErrors: [{ containerName: meta.containerName, error: `Échec de création du déclencheur "${tr.name}" : ${errMsg}` }] });
+          return { success: false, error: `Échec de création du déclencheur "${tr.name}" : ${errMsg}` };
+        }
+      }
+
+      const fullTag: GTMTag = { ...tag, firingTriggerId: [...linkedTriggerIds, ...createdTriggerIds] };
+      const created = (await createTag(token, selectedAccountId, containerId, blank.workspaceId, fullTag as never)) as { tagId?: string };
+      // Reflect locally so the matrix shows the tag (and any new triggers) as present without waiting for a rescan.
+      // Note: this writes to a dedicated blank workspace, not the scanned Default Workspace —
+      // a later rescan may still show "Absent" until that workspace is synced/merged.
+      set((state) => ({
+        monitoringData: state.monitoringData.map((d) =>
+          d.containerId === containerId
+            ? { ...d, tags: [...d.tags, { ...fullTag, tagId: created.tagId }], triggers: [...d.triggers, ...createdTriggers] }
+            : d,
+        ),
+      }));
+      return { success: true, tagId: created.tagId, workspaceId: blank.workspaceId };
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      set({ applyPublishErrors: [{ containerName: meta.containerName, error: errMsg }] });
+      return { success: false, error: errMsg };
+    } finally {
+      set({ isDuplicatingTag: false });
+    }
+  },
+
+  publishWorkspaceVersion: async (token, { containerId, workspaceId, versionName, description, label }) => {
+    const { selectedAccountId, monitoringData } = get();
+    const meta = monitoringData.find((d) => d.containerId === containerId);
+    if (!selectedAccountId || !meta) return { success: false, error: 'Container introuvable dans les données scannées' };
+
+    set({ isDuplicatingTag: true, applyPublishErrors: [] });
+
+    const result: DeploymentResult = {
+      containerId,
+      containerName: meta.containerName,
+      containerPublicId: meta.publicId,
+      workspaceId,
+      status: 'error',
+      steps: [
+        { label: 'Créer version', status: 'pending' },
+        { label: 'Publier', status: 'pending' },
+      ],
+    };
+    const recordName = label ?? `Publication — ${versionName}`;
+
+    try {
+      const versionRes = await createVersion(token, selectedAccountId, containerId, workspaceId, versionName, description);
+      const versionId = versionRes.containerVersion?.containerVersionId;
+      result.steps[0].status = 'success';
+
+      if (!versionId) {
+        result.steps[1].status = 'error';
+        result.steps[1].detail = 'versionId absent de la réponse API';
+        result.error = 'Aucun versionId retourné par GTM';
+        saveDeploymentRecord({
+          id: crypto.randomUUID(), packageName: recordName, deployedAt: new Date().toISOString(),
+          accountId: selectedAccountId, containers: [result],
+        });
+        set({ history: loadHistory(), applyPublishErrors: [{ containerName: meta.containerName, error: result.error }] });
+        return { success: false, error: result.error };
+      }
+
+      result.versionId = versionId;
+      await publishVersion(token, selectedAccountId, containerId, versionId);
+      result.steps[1].status = 'success';
+      result.status = 'success';
+
+      saveDeploymentRecord({
+        id: crypto.randomUUID(), packageName: recordName, deployedAt: new Date().toISOString(),
+        accountId: selectedAccountId, containers: [result],
+      });
+      set({ history: loadHistory() });
+      return { success: true };
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      if (result.steps[0].status === 'pending') {
+        result.steps[0].status = 'error';
+        result.steps[0].detail = errMsg;
+      } else {
+        result.steps[1].status = 'error';
+        result.steps[1].detail = errMsg;
+      }
+      result.error = errMsg;
+      saveDeploymentRecord({
+        id: crypto.randomUUID(), packageName: recordName, deployedAt: new Date().toISOString(),
+        accountId: selectedAccountId, containers: [result],
+      });
+      set({ history: loadHistory(), applyPublishErrors: [{ containerName: meta.containerName, error: errMsg }] });
+      return { success: false, error: errMsg };
+    } finally {
+      set({ isDuplicatingTag: false });
+    }
+  },
+
+  duplicateTagToContainer: async (token, { containerId, tag, linkedTriggerIds, triggersToCreate, versionName, description }) => {
+    const draft = await get().writeTagDraft(token, { containerId, tag, linkedTriggerIds, triggersToCreate });
+    if (!draft.success || !draft.workspaceId) return { success: false, error: draft.error };
+    return get().publishWorkspaceVersion(token, { containerId, workspaceId: draft.workspaceId, versionName, description, label: `Duplication — ${tag.name}` });
+  },
+
+  addTagDuplication: (op) => {
+    set((state) => {
+      const isDuplicate = state.pendingTagDuplications.some((existing) =>
+        existing.status === 'pending' && existing.containerId === op.containerId && existing.tag.name === op.tag.name,
+      );
+      if (isDuplicate) return state;
+      const newOp: TagDuplicationOperation = {
+        ...op,
+        id: crypto.randomUUID(),
+        status: 'pending',
+        createdAt: new Date().toISOString(),
+      };
+      return { pendingTagDuplications: [...state.pendingTagDuplications, newOp] };
+    });
+  },
+
+  removeTagDuplication: (id) =>
+    set((state) => ({ pendingTagDuplications: state.pendingTagDuplications.filter((op) => op.id !== id) })),
+
+  clearTagDuplications: () => set({ pendingTagDuplications: [] }),
+
+  addVariableDuplication: (op) => {
+    set((state) => {
+      const isDuplicate = state.pendingVariableDuplications.some((existing) =>
+        existing.status === 'pending' && existing.containerId === op.containerId && existing.variable.name === op.variable.name,
+      );
+      if (isDuplicate) return state;
+      const newOp: VariableDuplicationOperation = {
+        ...op,
+        id: crypto.randomUUID(),
+        status: 'pending',
+        createdAt: new Date().toISOString(),
+      };
+      return { pendingVariableDuplications: [...state.pendingVariableDuplications, newOp] };
+    });
+  },
+
+  removeVariableDuplication: (id) =>
+    set((state) => ({ pendingVariableDuplications: state.pendingVariableDuplications.filter((op) => op.id !== id) })),
+
+  clearVariableDuplications: () => set({ pendingVariableDuplications: [] }),
+
+  reconcilePendingOps: () => {
+    const { monitoringData, pendingRenames, pendingTagDuplications, pendingVariableDuplications, pendingTriggerOps } = get();
+    if (monitoringData.length === 0) return;
+
+    const dataByContainer = new Map(monitoringData.map((d) => [d.containerId, d]));
+    const allNames = (d: MonitoringContainerData) => [
+      ...d.tags.map((t) => t.name),
+      ...d.triggers.map((t) => t.name),
+      ...d.variables.map((v) => v.name),
+    ];
+
+    let renamesChanged = false;
+    const nextRenames = pendingRenames.map((op) => {
+      if (op.status !== 'pending') return op;
+      const meta = dataByContainer.get(op.containerId);
+      if (!meta) return op;
+      const names = allNames(meta);
+      const alreadyDone = !names.includes(op.oldName) && names.includes(op.newName);
+      if (alreadyDone) { renamesChanged = true; return { ...op, status: 'applied' as const }; }
+      return op;
+    });
+
+    let tagDupsChanged = false;
+    const nextTagDups = pendingTagDuplications.map((op) => {
+      if (op.status !== 'pending') return op;
+      const meta = dataByContainer.get(op.containerId);
+      if (!meta) return op;
+      const alreadyDone = meta.tags.some((t) => t.name === op.tag.name);
+      if (alreadyDone) { tagDupsChanged = true; return { ...op, status: 'applied' as const }; }
+      return op;
+    });
+
+    let varDupsChanged = false;
+    const nextVarDups = pendingVariableDuplications.map((op) => {
+      if (op.status !== 'pending') return op;
+      const meta = dataByContainer.get(op.containerId);
+      if (!meta) return op;
+      const alreadyDone = meta.variables.some((v) => v.name === op.variable.name);
+      if (alreadyDone) { varDupsChanged = true; return { ...op, status: 'applied' as const }; }
+      return op;
+    });
+
+    // Trigger ops: only the simple 'remove' case is safely auto-verifiable (a single trigger ID
+    // either is or isn't in the tag's firingTriggerId). 'sync' spans multiple steps/containers —
+    // left for manual review rather than risk a wrong auto-clear.
+    let triggerOpsChanged = false;
+    const nextTriggerOps = pendingTriggerOps.map((op) => {
+      if (op.status !== 'pending' || op.kind !== 'remove') return op;
+      const allStepsResolved = op.steps.every((step) => {
+        const meta = dataByContainer.get(step.containerId);
+        if (!meta) return false;
+        const tag = findTagByRowKey(meta.tags, op.tagCategory, op.tagRowKey, meta.templates);
+        if (!tag) return false;
+        const firing = tag.firingTriggerId ?? [];
+        return (step.unlink ?? []).every((id) => !firing.includes(id));
+      });
+      if (allStepsResolved) { triggerOpsChanged = true; return { ...op, status: 'applied' as const }; }
+      return op;
+    });
+
+    if (renamesChanged || tagDupsChanged || varDupsChanged || triggerOpsChanged) {
+      set({
+        pendingRenames: nextRenames,
+        pendingTagDuplications: nextTagDups,
+        pendingVariableDuplications: nextVarDups,
+        pendingTriggerOps: nextTriggerOps,
+      });
+    }
+  },
+
+  isApplyingContainerQueue: false,
+  applyContainerQueue: async (token, containerId, { versionName, description }) => {
+    const { selectedAccountId, monitoringData, pendingRenames, pendingTriggerOps, pendingTagDuplications, pendingVariableDuplications } = get();
+    const meta = monitoringData.find((d) => d.containerId === containerId);
+    if (!selectedAccountId || !meta) return { success: false, error: 'Container introuvable dans les données scannées' };
+
+    const renameOps = pendingRenames.filter((r) => r.status === 'pending' && r.containerId === containerId);
+    const dupOps = pendingTagDuplications.filter((d) => d.status === 'pending' && d.containerId === containerId);
+    const varDupOps = pendingVariableDuplications.filter((d) => d.status === 'pending' && d.containerId === containerId);
+    const triggerWorkItems = pendingTriggerOps.flatMap((op) =>
+      op.status === 'pending'
+        ? op.steps.filter((s) => s.containerId === containerId).map((step) => ({ opId: op.id, step }))
+        : [],
+    );
+
+    if (renameOps.length === 0 && dupOps.length === 0 && varDupOps.length === 0 && triggerWorkItems.length === 0) {
+      return { success: false, error: 'Aucune modification en attente pour ce container' };
+    }
+
+    set({ isApplyingContainerQueue: true, applyPublishErrors: [] });
+
+    try {
+      const label = `DK Déploiement — ${meta.containerName}`;
+      const blank = await resolveBlankWorkspace(token, selectedAccountId, containerId, label);
+      if ('error' in blank) {
+        set({ applyPublishErrors: [{ containerName: meta.containerName, error: blank.error }] });
+        return { success: false, error: blank.error };
+      }
+      const workspaceId = blank.workspaceId;
+
+      let okCount = 0;
+      let totalCount = 0;
+
+      // 1. Renames
+      for (const op of renameOps) {
+        totalCount++;
+        try {
+          const tag = meta.tags.find((t) => t.name === op.oldName);
+          const trigger = !tag ? meta.triggers.find((t) => t.name === op.oldName) : undefined;
+          const variable = !tag && !trigger ? meta.variables.find((v) => v.name === op.oldName) : undefined;
+
+          if (tag && tag.tagId) {
+            const payload: GTMTag = {
+              name: op.newName, type: tag.type,
+              ...(tag.parameter ? { parameter: tag.parameter } : {}),
+              ...(tag.firingTriggerId ? { firingTriggerId: tag.firingTriggerId } : {}),
+              ...(tag.blockingTriggerId ? { blockingTriggerId: tag.blockingTriggerId } : {}),
+              ...(tag.tagFiringOption ? { tagFiringOption: tag.tagFiringOption } : {}),
+              ...(tag.notes ? { notes: tag.notes } : {}),
+            };
+            await updateTag(token, selectedAccountId, containerId, workspaceId, tag.tagId, payload as never);
+          } else if (trigger && trigger.triggerId) {
+            const payload: GTMTrigger = {
+              name: op.newName, type: trigger.type,
+              ...(trigger.filter ? { filter: trigger.filter } : {}),
+              ...(trigger.customEventFilter ? { customEventFilter: trigger.customEventFilter } : {}),
+              ...(trigger.parameter ? { parameter: trigger.parameter } : {}),
+              ...(trigger.notes ? { notes: trigger.notes } : {}),
+            };
+            await updateTrigger(token, selectedAccountId, containerId, workspaceId, trigger.triggerId, payload as never);
+          } else if (variable && variable.variableId) {
+            const payload: GTMVariable = {
+              name: op.newName, type: variable.type,
+              ...(variable.parameter ? { parameter: variable.parameter } : {}),
+              ...(variable.notes ? { notes: variable.notes } : {}),
+            };
+            await updateVariable(token, selectedAccountId, containerId, workspaceId, variable.variableId, payload as never);
+          } else {
+            throw new Error(`Entité "${op.oldName}" introuvable dans ${meta.containerName}`);
+          }
+          okCount++;
+          set((state) => ({ pendingRenames: state.pendingRenames.map((r) => r.id === op.id ? { ...r, status: 'applied' as const } : r) }));
+        } catch (err) {
+          const errMsg = err instanceof Error ? err.message : String(err);
+          set((state) => ({ pendingRenames: state.pendingRenames.map((r) => r.id === op.id ? { ...r, status: 'failed' as const, error: errMsg } : r) }));
+        }
+      }
+
+      // 2. Trigger ops (remove/sync) — group by parent op so a multi-container op only
+      // gets marked applied once ALL of its steps (across containers) have succeeded.
+      const opSucceededSteps = new Map<string, number>();
+      for (const { opId, step } of triggerWorkItems) {
+        totalCount++;
+        const op = pendingTriggerOps.find((p) => p.id === opId);
+        if (!op) continue;
+        try {
+          const tag = findTagByRowKey(meta.tags, op.tagCategory, op.tagRowKey, meta.templates);
+          if (!tag || !tag.tagId) throw new Error(`Tag "${op.tagRowKey}" introuvable dans ${meta.containerName}`);
+
+          const firing = new Set(tag.firingTriggerId ?? []);
+          for (const id of step.unlink ?? []) firing.delete(id);
+          for (const id of step.linkExisting ?? []) firing.add(id);
+
+          for (const tr of step.createAndLink ?? []) {
+            const clone: GTMTrigger = {
+              name: tr.name, type: tr.type,
+              ...(tr.filter ? { filter: tr.filter } : {}),
+              ...(tr.customEventFilter ? { customEventFilter: tr.customEventFilter } : {}),
+              ...(tr.parameter ? { parameter: tr.parameter } : {}),
+              ...(tr.notes ? { notes: tr.notes } : {}),
+            };
+            const createdTr = (await createTrigger(token, selectedAccountId, containerId, workspaceId, clone as never)) as { triggerId?: string };
+            if (createdTr.triggerId) firing.add(createdTr.triggerId);
+          }
+
+          const tagPayload: GTMTag = {
+            name: tag.name, type: tag.type,
+            ...(tag.parameter ? { parameter: tag.parameter } : {}),
+            firingTriggerId: [...firing],
+            ...(tag.blockingTriggerId ? { blockingTriggerId: tag.blockingTriggerId } : {}),
+            ...(tag.tagFiringOption ? { tagFiringOption: tag.tagFiringOption } : {}),
+            ...(tag.notes ? { notes: tag.notes } : {}),
+          };
+          await updateTag(token, selectedAccountId, containerId, workspaceId, tag.tagId, tagPayload as never);
+
+          okCount++;
+          opSucceededSteps.set(opId, (opSucceededSteps.get(opId) ?? 0) + 1);
+        } catch (err) {
+          const errMsg = err instanceof Error ? err.message : String(err);
+          set((state) => ({
+            pendingTriggerOps: state.pendingTriggerOps.map((o) => o.id === opId ? { ...o, status: 'failed' as const, error: errMsg } : o),
+          }));
+        }
+      }
+      for (const [opId, succeeded] of opSucceededSteps) {
+        const op = pendingTriggerOps.find((p) => p.id === opId);
+        if (!op) continue;
+        const totalStepsInThisContainer = triggerWorkItems.filter((w) => w.opId === opId).length;
+        if (succeeded === totalStepsInThisContainer) {
+          // Only mark applied if this container held ALL of the op's steps (the common case —
+          // multi-container sync ops spanning several containers get applied incrementally
+          // and are only fully "applied" once every container's queue has been published).
+          const stepsElsewhere = op.steps.some((s) => s.containerId !== containerId);
+          if (!stepsElsewhere) {
+            set((state) => ({
+              pendingTriggerOps: state.pendingTriggerOps.map((o) => o.id === opId ? { ...o, status: 'applied' as const } : o),
+            }));
+          }
+        }
+      }
+
+      // 3. Tag duplications
+      for (const dup of dupOps) {
+        totalCount++;
+        try {
+          const createdTriggerIds: string[] = [];
+          for (const tr of dup.triggersToCreate) {
+            const clone: GTMTrigger = {
+              name: tr.name, type: tr.type,
+              ...(tr.filter ? { filter: tr.filter } : {}),
+              ...(tr.customEventFilter ? { customEventFilter: tr.customEventFilter } : {}),
+              ...(tr.parameter ? { parameter: tr.parameter } : {}),
+              ...(tr.notes ? { notes: tr.notes } : {}),
+            };
+            const createdTr = (await createTrigger(token, selectedAccountId, containerId, workspaceId, clone as never)) as { triggerId?: string };
+            if (createdTr.triggerId) createdTriggerIds.push(createdTr.triggerId);
+          }
+          const fullTag: GTMTag = { ...dup.tag, firingTriggerId: [...dup.linkedTriggerIds, ...createdTriggerIds] };
+          await createTag(token, selectedAccountId, containerId, workspaceId, fullTag as never);
+          okCount++;
+          set((state) => ({ pendingTagDuplications: state.pendingTagDuplications.map((d) => d.id === dup.id ? { ...d, status: 'applied' as const } : d) }));
+        } catch (err) {
+          const errMsg = err instanceof Error ? err.message : String(err);
+          set((state) => ({ pendingTagDuplications: state.pendingTagDuplications.map((d) => d.id === dup.id ? { ...d, status: 'failed' as const, error: errMsg } : d) }));
+        }
+      }
+
+      // 4. Variable duplications
+      for (const dup of varDupOps) {
+        totalCount++;
+        try {
+          const payload: GTMVariable = {
+            name: dup.variable.name,
+            type: dup.variable.type,
+            ...(dup.variable.parameter ? { parameter: dup.variable.parameter } : {}),
+            ...(dup.variable.notes ? { notes: dup.variable.notes } : {}),
+          };
+          await createVariable(token, selectedAccountId, containerId, workspaceId, payload as never);
+          okCount++;
+          set((state) => ({ pendingVariableDuplications: state.pendingVariableDuplications.map((d) => d.id === dup.id ? { ...d, status: 'applied' as const } : d) }));
+        } catch (err) {
+          const errMsg = err instanceof Error ? err.message : String(err);
+          set((state) => ({ pendingVariableDuplications: state.pendingVariableDuplications.map((d) => d.id === dup.id ? { ...d, status: 'failed' as const, error: errMsg } : d) }));
+        }
+      }
+
+      if (okCount === 0) {
+        const errMsg = 'Aucune modification appliquée';
+        set({ applyPublishErrors: [{ containerName: meta.containerName, error: errMsg }] });
+        return { success: false, error: errMsg };
+      }
+
+      const publishRes = await get().publishWorkspaceVersion(token, {
+        containerId, workspaceId, versionName, description,
+        label: `Déploiement — ${meta.containerName} (${okCount}/${totalCount})`,
+      });
+      return publishRes;
+    } finally {
+      set({ isApplyingContainerQueue: false });
+    }
+  },
+
   addContainerRenames: (ops) => {
     const newOps: ContainerRenameOperation[] = ops.map((op) => ({
       ...op,
@@ -801,6 +1465,55 @@ export const useGTMStore = create<GTMStore>((set, get) => ({
     set((state) => ({ pendingContainerRenames: state.pendingContainerRenames.filter((op) => op.id !== id) })),
 
   clearContainerRenames: () => set({ pendingContainerRenames: [] }),
+
+  isApplyingContainerRenames: false,
+  applyContainerRenames: async (token) => {
+    const { pendingContainerRenames, containers } = get();
+    const pending = pendingContainerRenames.filter((op) => op.status === 'pending');
+    if (pending.length === 0) return;
+
+    set({ isApplyingContainerRenames: true, applyPublishErrors: [] });
+    const errors: { containerName: string; error: string }[] = [];
+
+    try {
+      for (const op of pending) {
+        try {
+          if (op.kind === 'account') {
+            await updateAccount(token, op.accountId, { name: op.newName });
+          } else {
+            if (!op.containerId) throw new Error('containerId manquant sur cette opération');
+            const meta = containers.find((c) => c.containerId === op.containerId);
+            if (!meta) throw new Error(`Container introuvable dans le compte (id ${op.containerId})`);
+            await updateContainer(token, op.accountId, op.containerId, { name: op.newName, usageContext: meta.usageContext });
+          }
+          set((state) => ({
+            pendingContainerRenames: state.pendingContainerRenames.map((r) => r.id === op.id ? { ...r, status: 'applied' as const } : r),
+          }));
+        } catch (err) {
+          const errMsg = err instanceof Error ? err.message : String(err);
+          errors.push({ containerName: op.oldName, error: errMsg });
+          set((state) => ({
+            pendingContainerRenames: state.pendingContainerRenames.map((r) => r.id === op.id ? { ...r, status: 'failed' as const, error: errMsg } : r),
+          }));
+        }
+      }
+
+      // Refresh local container list so renamed entries show their new names immediately
+      const { selectedAccountId } = get();
+      if (selectedAccountId) {
+        try {
+          const refreshed = await listContainers(token, selectedAccountId);
+          set({ containers: refreshed });
+        } catch {
+          // Non-fatal — the rename already applied server-side, just couldn't refresh the local list.
+        }
+      }
+
+      if (errors.length > 0) set({ applyPublishErrors: errors });
+    } finally {
+      set({ isApplyingContainerRenames: false });
+    }
+  },
 
   // ─── Monitoring scan ────────────────────────────────────────────────────────
 
@@ -861,8 +1574,12 @@ export const useGTMStore = create<GTMStore>((set, get) => ({
     await sleep(2500);
 
     try {
-      // Sequential scan: 1 workspace call + 3 sequential entity calls per container = 4 calls.
-      // 10s pause between containers → 4 calls / 10s = 24 req/min (well under 30 req/min quota).
+      // 2 calls per container: the workspace (needed for its ID, used by Nettoyage/write features)
+      // + the full live version content (tag[]/trigger[]/variable[] in ONE call, replacing the
+      // previous 3 separate list-by-workspace calls). The shared rate limiter (25 req/min) paces
+      // every call automatically — no manual sleep needed, it can't ever exceed quota.
+      // Fallback: containers never published (no live version yet) are scanned from their
+      // workspace directly (3 extra calls, rare — happens once for a genuinely new container).
       for (let i = 0; i < targets.length; i++) {
         if (cancelled) break;
         const c = targets[i];
@@ -870,13 +1587,30 @@ export const useGTMStore = create<GTMStore>((set, get) => ({
 
         const ws = await getDefaultWorkspace(token, selectedAccountId, c.containerId);
         if (cancelled) break;
-        // Sequential (not parallel) to stay well under the per-minute quota
-        const tags = await listTagsFull(token, selectedAccountId, c.containerId, ws.workspaceId);
+        const live = await getLiveVersion(token, selectedAccountId, c.containerId);
         if (cancelled) break;
-        const variables = await listVariablesFull(token, selectedAccountId, c.containerId, ws.workspaceId);
-        if (cancelled) break;
-        const triggers = await listTriggersFull(token, selectedAccountId, c.containerId, ws.workspaceId);
-        if (cancelled) break;
+
+        let tags, variables, triggers, templates, gtagConfigs;
+        if (live && (live.tag || live.trigger || live.variable)) {
+          tags = live.tag ?? [];
+          variables = live.variable ?? [];
+          triggers = live.trigger ?? [];
+          templates = live.customTemplate ?? [];
+          gtagConfigs = live.gtagConfig ?? [];
+        } else {
+          // Never published — no live version to read from, fall back to the workspace.
+          tags = await listTagsFull(token, selectedAccountId, c.containerId, ws.workspaceId);
+          if (cancelled) break;
+          variables = await listVariablesFull(token, selectedAccountId, c.containerId, ws.workspaceId);
+          if (cancelled) break;
+          triggers = await listTriggersFull(token, selectedAccountId, c.containerId, ws.workspaceId);
+          if (cancelled) break;
+          templates = await listTemplates(token, selectedAccountId, c.containerId, ws.workspaceId);
+          if (cancelled) break;
+          gtagConfigs = await listGtagConfig(token, selectedAccountId, c.containerId, ws.workspaceId);
+          if (cancelled) break;
+        }
+
 
         const entry: MonitoringContainerData = {
           containerId: c.containerId,
@@ -886,14 +1620,15 @@ export const useGTMStore = create<GTMStore>((set, get) => ({
           tags,
           variables,
           triggers,
+          templates,
+          gtagConfigs,
           scannedAt: new Date().toISOString(),
         };
         set((state) => ({ monitoringData: [...state.monitoringData, entry] }));
-
-        if (!cancelled && i < targets.length - 1) await sleep(10_000);
       }
       const finalData = get().monitoringData;
       set({ isLoadingMonitoring: false, monitoringScanProgress: null, _cancelMonitoringScan: null, _abortDateEnrichment: false, eventChainRows: computeEventChainFn(finalData) });
+      get().reconcilePendingOps();
     } catch (err) {
       set({ isLoadingMonitoring: false, monitoringError: String(err), monitoringScanProgress: null, _cancelMonitoringScan: null, _abortDateEnrichment: false });
     }
@@ -925,19 +1660,21 @@ export const useGTMStore = create<GTMStore>((set, get) => ({
     // ── Load ops queues ───────────────────────────────────────────────────────
     let ops = tryParse<PersistedOps>(
       localStorage.getItem(`${OPS_PERSIST_KEY}_${profileId}`),
-      { pendingDeletions: [], pendingRenames: [], pendingTriggerOps: [], pendingContainerRenames: [] },
+      { pendingDeletions: [], pendingRenames: [], pendingTriggerOps: [], pendingContainerRenames: [], pendingTagDuplications: [], pendingVariableDuplications: [] },
     );
 
     // Same one-shot migration for ops
     const opsEmpty = !ops.pendingDeletions.length && !ops.pendingRenames.length &&
-      !ops.pendingTriggerOps.length && !ops.pendingContainerRenames.length;
+      !ops.pendingTriggerOps.length && !ops.pendingContainerRenames.length && !ops.pendingTagDuplications.length &&
+      !ops.pendingVariableDuplications?.length;
     if (opsEmpty) {
       const legacyOps = tryParse<PersistedOps>(
         localStorage.getItem(OPS_PERSIST_KEY),
-        { pendingDeletions: [], pendingRenames: [], pendingTriggerOps: [], pendingContainerRenames: [] },
+        { pendingDeletions: [], pendingRenames: [], pendingTriggerOps: [], pendingContainerRenames: [], pendingTagDuplications: [], pendingVariableDuplications: [] },
       );
       const legacyHasData = legacyOps.pendingDeletions.length || legacyOps.pendingRenames.length ||
-        legacyOps.pendingTriggerOps.length || legacyOps.pendingContainerRenames.length;
+        legacyOps.pendingTriggerOps.length || legacyOps.pendingContainerRenames.length || legacyOps.pendingTagDuplications.length ||
+        legacyOps.pendingVariableDuplications?.length;
       if (legacyHasData) {
         ops = legacyOps;
         safeLocalSet(`${OPS_PERSIST_KEY}_${profileId}`, JSON.stringify(legacyOps));
@@ -953,6 +1690,8 @@ export const useGTMStore = create<GTMStore>((set, get) => ({
       pendingRenames: ops.pendingRenames,
       pendingTriggerOps: ops.pendingTriggerOps,
       pendingContainerRenames: ops.pendingContainerRenames,
+      pendingTagDuplications: ops.pendingTagDuplications ?? [],
+      pendingVariableDuplications: ops.pendingVariableDuplications ?? [],
       // Reset transient state
       isLoadingMonitoring: false,
       monitoringError: null,
@@ -960,7 +1699,9 @@ export const useGTMStore = create<GTMStore>((set, get) => ({
       _cancelMonitoringScan: null,
       _abortDateEnrichment: false,
       isApplyingDeletions: false,
+      isDuplicatingTag: false,
     });
+    get().reconcilePendingOps();
   },
 
   clearMonitoringData: () => set({ monitoringData: [], monitoringError: null, eventChainRows: [] }),
@@ -999,13 +1740,17 @@ useGTMStore.subscribe((state, prev) => {
     state.pendingDeletions !== prev.pendingDeletions ||
     state.pendingRenames !== prev.pendingRenames ||
     state.pendingTriggerOps !== prev.pendingTriggerOps ||
-    state.pendingContainerRenames !== prev.pendingContainerRenames
+    state.pendingContainerRenames !== prev.pendingContainerRenames ||
+    state.pendingTagDuplications !== prev.pendingTagDuplications ||
+    state.pendingVariableDuplications !== prev.pendingVariableDuplications
   ) {
     safeLocalSet(`${OPS_PERSIST_KEY}_${profileId}`, JSON.stringify({
       pendingDeletions: state.pendingDeletions,
       pendingRenames: state.pendingRenames,
       pendingTriggerOps: state.pendingTriggerOps,
       pendingContainerRenames: state.pendingContainerRenames,
+      pendingTagDuplications: state.pendingTagDuplications,
+      pendingVariableDuplications: state.pendingVariableDuplications,
     }));
   }
 });

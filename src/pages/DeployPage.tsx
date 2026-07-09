@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/auth-store';
 import { useGTMStore } from '../store/gtm-store';
@@ -6,7 +6,8 @@ import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { DiffView } from '../components/diff/DiffView';
 import { GA4CoverageMatrix } from '../components/diff/GA4CoverageMatrix';
-import type { DeploymentResult } from '../types/gtm';
+import { PublishingLoader } from '../components/ui/PublishingLoader';
+import type { DeploymentResult, RenameOperation, TriggerOperation, TriggerOpStep, TagDuplicationOperation, VariableDuplicationOperation } from '../types/gtm';
 
 type Step = 'select' | 'diff' | 'progress' | 'done';
 
@@ -29,6 +30,195 @@ function StepIcon({ status }: { status: DeploymentResult['steps'][0]['status'] }
     <div className="w-5 h-5 rounded-full border-2 border-primary border-t-transparent shrink-0" style={{ animation: 'dk-spin 0.75s linear infinite' }} />
   );
   return <div className="w-5 h-5 rounded-full border-2 border-border shrink-0" />;
+}
+
+// ─── Pending changes (renames + trigger ops + tag duplications, queued from Monitoring) ──
+
+interface ContainerQueueGroup {
+  containerId: string;
+  containerName: string;
+  publicId: string;
+  renames: RenameOperation[];
+  triggerOps: { op: TriggerOperation; step: TriggerOpStep }[];
+  duplications: TagDuplicationOperation[];
+  variableDuplications: VariableDuplicationOperation[];
+}
+
+function ContainerQueueCard({ group }: { group: ContainerQueueGroup }) {
+  const { accessToken } = useAuthStore();
+  const { applyContainerQueue, isApplyingContainerQueue } = useGTMStore();
+  const [expanded, setExpanded] = useState(false);
+  const [versionName, setVersionName] = useState('');
+  const [versionDesc, setVersionDesc] = useState('');
+  const [publishing, setPublishing] = useState(false);
+  const [result, setResult] = useState<{ success: boolean; error?: string } | null>(null);
+
+  const totalCount = group.renames.length + group.triggerOps.length + group.duplications.length + group.variableDuplications.length;
+
+  function openPanel() {
+    const names = [
+      ...group.renames.map((r) => r.newName),
+      ...group.triggerOps.map((t) => t.op.tagRowKey),
+      ...group.duplications.map((d) => d.tag.name),
+      ...group.variableDuplications.map((d) => d.variable.name),
+    ];
+    const uniqueNames = [...new Set(names)];
+    const namesLabel = uniqueNames.length <= 4 ? uniqueNames.join(', ') : `${uniqueNames.slice(0, 4).join(', ')} +${uniqueNames.length - 4} autre${uniqueNames.length - 4 > 1 ? 's' : ''}`;
+    setVersionName(`Déploiement — ${namesLabel}`);
+    const lines = [
+      ...group.renames.map((r) => `Renommage : "${r.oldName}" -> "${r.newName}"`),
+      ...group.triggerOps.map(({ op }) => `${op.kind === 'remove' ? 'Retrait déclencheur' : 'Synchronisation déclencheurs'} : ${op.tagRowKey}`),
+      ...group.duplications.map((d) => `Duplication tag : "${d.tag.name}" depuis ${d.sourceContainerName}`),
+      ...group.variableDuplications.map((d) => `Duplication variable : "${d.variable.name}" depuis ${d.sourceContainerName}`),
+    ];
+    setVersionDesc(lines.join('\n'));
+    setResult(null);
+    setExpanded(true);
+  }
+
+  async function handlePublish() {
+    if (!accessToken || !versionName.trim()) return;
+    setPublishing(true);
+    setResult(null);
+    const res = await applyContainerQueue(accessToken, group.containerId, { versionName: versionName.trim(), description: versionDesc.trim() });
+    setPublishing(false);
+    setResult(res);
+    if (res.success) setExpanded(false);
+  }
+
+  return (
+    <div className="bg-card border border-border rounded-xl overflow-hidden">
+      <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="font-semibold text-sm text-foreground">{group.containerName}</span>
+          <Badge variant="default">{group.publicId}</Badge>
+          <span className="text-xs text-muted-fg">{totalCount} modification{totalCount > 1 ? 's' : ''}</span>
+        </div>
+        {!expanded && (
+          <Button size="sm" onClick={openPanel} disabled={!accessToken} title={!accessToken ? 'Session GTM expirée — reconnecte-toi' : undefined}>
+            Publier →
+          </Button>
+        )}
+      </div>
+
+      <div className="px-4 py-3 space-y-1.5 text-xs">
+        {group.renames.map((r) => (
+          <div key={r.id} className="flex items-center gap-2">
+            <Badge variant="default">Renommage</Badge>
+            <span className="font-mono text-muted-fg truncate max-w-[140px]">{r.oldName}</span>
+            <span className="text-muted-fg">→</span>
+            <span className="font-mono font-medium text-foreground truncate max-w-[140px]">{r.newName}</span>
+          </div>
+        ))}
+        {group.triggerOps.map(({ op }, i) => (
+          <div key={`${op.id}-${i}`} className="flex items-center gap-2">
+            <Badge variant={op.kind === 'remove' ? 'error' : 'info'}>{op.kind === 'remove' ? 'Retrait' : 'Sync'}</Badge>
+            <span className="font-mono text-foreground">{op.tagRowKey}</span>
+            <span className="text-muted-fg">({op.tagCategory})</span>
+          </div>
+        ))}
+        {group.duplications.map((d) => (
+          <div key={d.id} className="flex items-center gap-2">
+            <Badge variant="success">Duplication tag</Badge>
+            <span className="font-mono text-foreground">{d.tag.name}</span>
+            <span className="text-muted-fg">depuis {d.sourceContainerName}</span>
+          </div>
+        ))}
+        {group.variableDuplications.map((d) => (
+          <div key={d.id} className="flex items-center gap-2">
+            <Badge variant="success">Duplication variable</Badge>
+            <span className="font-mono text-foreground">{d.variable.name}</span>
+            <span className="text-muted-fg">depuis {d.sourceContainerName}</span>
+          </div>
+        ))}
+      </div>
+
+      {result && !result.success && (
+        <div className="px-4 py-2.5 text-xs bg-destructive/8 border-t border-destructive/20 text-destructive">
+          Échec : {result.error?.slice(0, 160)}
+        </div>
+      )}
+
+      {expanded && (
+        <div className="px-4 py-3 border-t border-border space-y-3" style={{ backgroundColor: 'hsl(220 20% 98%)' }}>
+          {publishing ? (
+            <PublishingLoader label={`Publication sur ${group.containerName}…`} />
+          ) : (
+            <>
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-muted-fg uppercase tracking-wide">Nom de la version GTM</label>
+                <input
+                  className="w-full h-9 px-3 text-sm border border-border rounded-lg bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                  value={versionName}
+                  onChange={(e) => setVersionName(e.target.value)}
+                  autoFocus
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-muted-fg uppercase tracking-wide">Description</label>
+                <textarea
+                  className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-primary resize-none font-mono"
+                  rows={4}
+                  value={versionDesc}
+                  onChange={(e) => setVersionDesc(e.target.value)}
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <Button variant="secondary" size="sm" onClick={() => setExpanded(false)}>Annuler</Button>
+                <div className="flex-1" />
+                <Button size="sm" onClick={handlePublish} disabled={!versionName.trim() || isApplyingContainerQueue}>
+                  Publier
+                </Button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PendingChangesSection() {
+  const { pendingRenames, pendingTriggerOps, pendingTagDuplications, pendingVariableDuplications } = useGTMStore();
+
+  const groups = useMemo(() => {
+    const map = new Map<string, ContainerQueueGroup>();
+    const ensure = (containerId: string, containerName: string, publicId: string) => {
+      if (!map.has(containerId)) map.set(containerId, { containerId, containerName, publicId, renames: [], triggerOps: [], duplications: [], variableDuplications: [] });
+      return map.get(containerId)!;
+    };
+    for (const r of pendingRenames) {
+      if (r.status !== 'pending') continue;
+      ensure(r.containerId, r.containerName, r.publicId).renames.push(r);
+    }
+    for (const op of pendingTriggerOps) {
+      if (op.status !== 'pending') continue;
+      for (const step of op.steps) {
+        ensure(step.containerId, step.containerName, step.publicId).triggerOps.push({ op, step });
+      }
+    }
+    for (const d of pendingTagDuplications) {
+      if (d.status !== 'pending') continue;
+      ensure(d.containerId, d.containerName, d.publicId).duplications.push(d);
+    }
+    for (const d of pendingVariableDuplications) {
+      if (d.status !== 'pending') continue;
+      ensure(d.containerId, d.containerName, d.publicId).variableDuplications.push(d);
+    }
+    return [...map.values()];
+  }, [pendingRenames, pendingTriggerOps, pendingTagDuplications, pendingVariableDuplications]);
+
+  if (groups.length === 0) return null;
+
+  return (
+    <div className="mb-6 space-y-3">
+      <h2 className="text-sm font-semibold text-foreground">
+        Modifications en attente
+        <span className="ml-2 text-xs font-normal text-muted-fg">planifiées depuis Monitoring — un container à la fois</span>
+      </h2>
+      {groups.map((g) => <ContainerQueueCard key={g.containerId} group={g} />)}
+    </div>
+  );
 }
 
 export function DeployPage() {
@@ -307,6 +497,8 @@ export function DeployPage() {
 
   return (
     <div className="max-w-2xl">
+      <PendingChangesSection />
+
       <div className="mb-6">
         <h1 className="text-xl font-bold text-foreground">Déployer un package</h1>
         <p className="text-sm text-muted-fg mt-1">Sélectionnez le package et les containers, puis analysez le diff.</p>

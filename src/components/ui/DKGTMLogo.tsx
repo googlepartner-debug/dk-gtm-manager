@@ -1,79 +1,82 @@
 interface Props {
   variant?: 'dark' | 'light'; // dark = sur fond sombre, light = sur fond clair
   size?: 'sm' | 'md' | 'lg';
-  showProduct?: boolean; // afficher "GTM Manager" ou juste "DK GTM"
+  showProduct?: boolean; // afficher "GTM Manager" ou juste le logo + "GTM"
 }
 
 const sizes = {
-  sm: { dk: 22, gtm: 14, sub: 9, gap: 4 },
-  md: { dk: 32, gtm: 20, sub: 11, gap: 6 },
-  lg: { dk: 52, gtm: 32, sub: 14, gap: 8 },
+  sm: { mark: 16, gtm: 13, sub: 9 },
+  md: { mark: 22, gtm: 17, sub: 10 },
+  lg: { mark: 34, gtm: 26, sub: 12 },
 };
 
-export function DKGTMLogo({ variant = 'dark', size = 'md', showProduct = true }: Props) {
-  const s = sizes[size];
-  const textColor = variant === 'dark' ? '#ffffff' : '#000a06';
-  const subColor = variant === 'dark' ? 'rgba(255,255,255,0.45)' : 'rgba(0,10,6,0.4)';
+// Ratio réel du logo Digitalkeys (viewBox 895 x 148.66)
+const MARK_ASPECT = 895 / 148.66;
 
+// Mark Digitalkeys — wordmark officiel (public/digitalkeys-logo.svg)
+function DigitalkeysMark({ height, textColor }: { height: number; textColor: string }) {
+  const width = height * MARK_ASPECT;
   return (
     <svg
-      viewBox={`0 0 ${s.dk * 2.5 + s.gap + s.gtm * 3.8} ${s.dk * 1.3}`}
-      height={s.dk * 1.3}
-      fill="none"
+      width={width}
+      height={height}
+      viewBox="0 0 895 148.66"
       xmlns="http://www.w3.org/2000/svg"
-      aria-label="DK GTM Manager"
-      style={{ display: 'block' }}
+      aria-hidden
+      style={{ display: 'block', shapeRendering: 'geometricPrecision' }}
     >
-      {/* DK — brand mark in purple */}
-      <text
-        x="0"
-        y={s.dk}
-        fontFamily="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
-        fontSize={s.dk}
-        fontWeight="900"
-        fill="#9031ff"
-        letterSpacing="-0.03em"
-      >
-        DK
-      </text>
-
-      {/* GTM — product identifier in white/dark */}
-      <text
-        x={s.dk * 2.5 + s.gap}
-        y={s.dk}
-        fontFamily="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
-        fontSize={s.gtm}
-        fontWeight="800"
-        fill={textColor}
-        letterSpacing="-0.02em"
-        dominantBaseline="auto"
-      >
-        GTM
-      </text>
-
-      {/* Manager — subtitle */}
-      {showProduct && (
-        <text
-          x={s.dk * 2.5 + s.gap}
-          y={s.dk * 1.25}
-          fontFamily="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
-          fontSize={s.sub}
-          fontWeight="600"
-          fill={subColor}
-          letterSpacing="0.08em"
-          textAnchor="start"
-          dominantBaseline="auto"
-        >
-          MANAGER
-        </text>
-      )}
+      <path fill={textColor} d="M0,146.52V1.79h35.38c12.27,0,21.83,1.58,28.68,4.73,6.85,3.16,11.7,8.1,14.56,14.83,2.86,6.73,4.29,15.34,4.29,25.82v52.71c0,10.72-1.43,19.54-4.29,26.45-2.86,6.91-7.65,12-14.38,15.28-6.73,3.28-16.11,4.91-28.14,4.91H0ZM29.48,125.97h6.25c5.48,0,9.38-.86,11.7-2.59,2.32-1.73,3.78-4.29,4.38-7.68.59-3.39.89-7.59.89-12.59v-59.68c0-5-.39-9.02-1.16-12.06-.78-3.04-2.32-5.27-4.65-6.7-2.32-1.43-6.11-2.15-11.35-2.15h-6.08v103.46Z"/>
+      <path fill={textColor} d="M102.74,146.52V1.79h29.3v144.73h-29.3Z"/>
+      <path fill={textColor} d="M191.19,148.66c-9.77,0-17.51-2.05-23.23-6.17-5.72-4.11-9.8-9.94-12.24-17.51-2.44-7.56-3.66-16.35-3.66-26.36v-48.42c0-10.36,1.25-19.3,3.75-26.8,2.5-7.5,6.88-13.28,13.13-17.33,6.25-4.05,14.74-6.07,25.46-6.07s18.55,1.73,24.57,5.18c6.01,3.46,10.33,8.34,12.95,14.65,2.62,6.32,3.93,13.82,3.93,22.51v8.4h-28.77v-10.19c0-3.81-.24-7.17-.71-10.1-.48-2.92-1.58-5.21-3.31-6.88-1.73-1.67-4.5-2.5-8.31-2.5s-6.79,1.01-8.58,3.04c-1.79,2.03-2.92,4.62-3.39,7.77-.48,3.16-.71,6.52-.71,10.1v64.15c0,4.05.36,7.68,1.07,10.9.71,3.22,2.05,5.72,4.02,7.51,1.97,1.79,4.79,2.68,8.49,2.68s6.55-.95,8.58-2.86c2.02-1.9,3.42-4.49,4.2-7.77.77-3.28,1.16-7,1.16-11.17v-15.37h-14.12v-17.87h40.74v74.33h-19.3l-1.79-13.04c-1.91,4.41-4.77,8.04-8.58,10.9-3.81,2.86-8.93,4.29-15.37,4.29Z"/>
+      <path fill={textColor} d="M256.76,146.52V1.79h29.3v144.73h-29.3Z"/>
+      <path fill={textColor} d="M321.8,146.52V23.76h-22.34V1.79h73.97v21.98h-21.98v122.76h-29.66Z"/>
+      <path fill={textColor} d="M371.47,146.52L399.53,1.79h32.7l27.87,144.73h-27.34l-5.18-31.81h-22.87l-5.54,31.81h-27.7ZM407.39,96.67h17.33l-8.76-58.43-8.58,58.43Z"/>
+      <path fill={textColor} d="M474.75,146.52V1.79h29.48v124.72h33.95v20.01h-63.43Z"/>
+      <path fill="#9031ff" d="M557.12,146.52V1.79h29.48v61.11l26.09-61.11h28.59l-27.16,65.04,29.13,79.69h-29.66l-22.34-64.86-4.65,8.22v56.64h-29.48Z"/>
+      <path fill="#9031ff" d="M655.75,146.52V1.79h63.07v20.37h-33.59v38.42h25.91v20.55h-25.91v45.39h33.95v20.01h-63.43Z"/>
+      <path fill="#9031ff" d="M752.95,146.52v-57.36L724.72,1.79h27.7l15.55,50.92,14.47-50.92h26.8l-27.87,87.37v57.36h-28.41Z"/>
+      <path fill="#9031ff" d="M857.83,148.48c-8.93,0-16.38-1.64-22.34-4.91-5.96-3.27-10.45-8.22-13.49-14.83-3.04-6.61-4.8-15.04-5.27-25.28l25.37-4.29c.24,5.96.86,10.93,1.88,14.92,1.01,3.99,2.56,6.97,4.65,8.93,2.08,1.96,4.67,2.95,7.77,2.95,3.81,0,6.4-1.19,7.77-3.57,1.37-2.38,2.05-5.12,2.05-8.22,0-6.08-1.46-11.17-4.38-15.28-2.92-4.11-6.76-8.25-11.53-12.42l-15.01-13.04c-5.36-4.52-9.74-9.65-13.13-15.37-3.39-5.72-5.09-12.75-5.09-21.09,0-11.91,3.48-21.05,10.45-27.43,6.97-6.37,16.53-9.56,28.68-9.56,7.26,0,13.22,1.19,17.87,3.57,4.65,2.39,8.25,5.57,10.81,9.56,2.56,3.99,4.35,8.34,5.36,13.04,1.01,4.71,1.64,9.38,1.88,14.03l-25.19,3.75c-.24-4.4-.63-8.28-1.16-11.61-.54-3.33-1.61-5.96-3.22-7.86-1.61-1.9-4.02-2.86-7.24-2.86-3.46,0-6.02,1.28-7.68,3.84-1.67,2.56-2.5,5.39-2.5,8.49,0,5.12,1.16,9.32,3.48,12.6,2.32,3.28,5.51,6.7,9.56,10.27l14.65,12.87c6.08,5.24,11.28,11.23,15.63,17.96,4.35,6.73,6.52,15.04,6.52,24.93,0,6.79-1.55,12.93-4.65,18.4-3.1,5.48-7.42,9.77-12.95,12.87s-12.06,4.64-19.57,4.64Z"/>
     </svg>
   );
 }
 
-// Version inline SVG pour export img src (base64)
-export const DK_GTM_LOGO_DARK_SVG = `<svg viewBox="0 0 220 56" height="56" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <text x="0" y="44" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="52" font-weight="900" fill="#9031ff" letter-spacing="-0.03em">DK</text>
-  <text x="136" y="44" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="32" font-weight="800" fill="#ffffff" letter-spacing="-0.02em">GTM</text>
-  <text x="136" y="56" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="10" font-weight="600" fill="rgba(255,255,255,0.4)" letter-spacing="0.08em">MANAGER</text>
-</svg>`;
+export function DKGTMLogo({ variant = 'dark', size = 'md', showProduct = true }: Props) {
+  const s = sizes[size];
+  // Texte rendu en HTML (pas en <text> SVG) pour rester net à toutes les tailles.
+  // variant="light" = fond clair -> texte quasi-noir ; variant="dark" = fond sombre -> texte blanc.
+  const textColor = variant === 'dark' ? '#ffffff' : '#0a0a0a';
+  const subColor = variant === 'dark' ? 'rgba(255,255,255,0.55)' : 'rgba(10,10,10,0.5)';
+
+  return (
+    <div className="flex items-center gap-2" aria-label="Digitalkeys GTM Manager">
+      <DigitalkeysMark height={s.mark} textColor={textColor} />
+      <div className="flex flex-col justify-center leading-none">
+        <span
+          style={{
+            fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+            fontSize: s.gtm,
+            fontWeight: 800,
+            color: textColor,
+            letterSpacing: '-0.02em',
+          }}
+        >
+          GTM
+        </span>
+        {showProduct && (
+          <span
+            style={{
+              fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+              fontSize: s.sub,
+              fontWeight: 700,
+              color: subColor,
+              letterSpacing: '0.08em',
+              marginTop: 1,
+            }}
+          >
+            MANAGER
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}

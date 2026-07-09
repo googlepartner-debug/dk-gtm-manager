@@ -20,12 +20,23 @@ export function ContainersPage() {
     containers, selectedContainerIds, toggleContainer, selectAllContainers, clearContainerSelection,
     isLoadingAccounts, isLoadingContainers, accountError,
     pendingContainerRenames, removeContainerRename, clearContainerRenames,
+    applyContainerRenames, isApplyingContainerRenames,
   } = useGTMStore();
 
   const navigate = useNavigate();
   const [sortMode, setSortMode] = useState<SortMode>('api');
   const [loadingMsgIdx, setLoadingMsgIdx] = useState(0);
   const [renameModalOpen, setRenameModalOpen] = useState(false);
+  const [renameErrorNotif, setRenameErrorNotif] = useState<string | null>(null);
+  const pendingRenamesOnly = pendingContainerRenames.filter((op) => op.status === 'pending');
+
+  async function handleApplyContainerRenames() {
+    if (!accessToken) { setRenameErrorNotif('Session GTM expirée ou absente — reconnecte-toi puis réessaie.'); return; }
+    setRenameErrorNotif(null);
+    await applyContainerRenames(accessToken);
+    const errs = useGTMStore.getState().applyPublishErrors;
+    if (errs.length > 0) setRenameErrorNotif(`${errs.length} renommage(s) en échec — ${errs[0].error.slice(0, 140)}`);
+  }
 
   // Derived — déclarés avant tout usage
   const account = accounts.find((a) => a.accountId === selectedAccountId);
@@ -309,8 +320,12 @@ export function ContainersPage() {
                     <path d="M2 7h10M8 3l4 4-4 4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
                   </svg>
                   <span className="text-sm font-medium text-foreground flex-1">{op.newName}</span>
-                  <span className="shrink-0 text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: 'hsl(220 13% 91%)', color: 'hsl(220 13% 45%)' }}>
-                    en attente
+                  <span className="shrink-0 text-xs px-2 py-0.5 rounded-full" style={
+                    op.status === 'applied' ? { backgroundColor: 'hsl(142 60% 93%)', color: 'hsl(142 50% 30%)' }
+                    : op.status === 'failed' ? { backgroundColor: 'hsl(0 85% 94%)', color: 'hsl(0 65% 45%)' }
+                    : { backgroundColor: 'hsl(220 13% 91%)', color: 'hsl(220 13% 45%)' }
+                  } title={op.error}>
+                    {op.status === 'applied' ? 'Renommé' : op.status === 'failed' ? 'Échec' : 'en attente'}
                   </span>
                   <button
                     type="button"
@@ -325,9 +340,22 @@ export function ContainersPage() {
               ))}
             </ul>
           </div>
-          <p className="text-xs text-muted-fg mt-2">
-            Ces modifications seront appliquées via l'API GTM (OAuth requis).
-          </p>
+
+          {renameErrorNotif && (
+            <div className="mt-2 px-3 py-2 rounded-lg text-xs" style={{ backgroundColor: 'hsl(0 85% 96%)', color: 'hsl(0 65% 40%)' }}>
+              {renameErrorNotif}
+            </div>
+          )}
+
+          {pendingRenamesOnly.length > 0 && (
+            <div className="mt-2 flex items-center gap-2">
+              <Button size="sm" onClick={handleApplyContainerRenames} disabled={isApplyingContainerRenames || !accessToken}
+                title={!accessToken ? 'Session GTM expirée — reconnecte-toi' : undefined}>
+                {isApplyingContainerRenames ? 'Application…' : `Appliquer ${pendingRenamesOnly.length} renommage${pendingRenamesOnly.length > 1 ? 's' : ''}`}
+              </Button>
+              <span className="text-xs text-muted-fg">Renomme directement le compte/container sur GTM — pas de version à publier.</span>
+            </div>
+          )}
         </div>
       )}
 

@@ -1,8 +1,11 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { useGTMStore } from '../store/gtm-store';
 import { computeEventChain, resolveTagEventNames } from '../lib/event-chain';
+import { GA4_OFFICIAL_EVENTS } from '../data/official-params';
 import type { MonitoringContainerData } from '../data/monitoring-mock';
 import type { GTMParameter } from '../types/gtm';
+
+const GA4_ECOMMERCE_EVENT_NAMES = new Set(GA4_OFFICIAL_EVENTS.map((e) => e.eventName));
 
 // ─── Drill-down state ──────────────────────────────────────────────────────────
 
@@ -249,6 +252,7 @@ export function EventsPage() {
 
   const [drill, setDrill] = useState<DrillState>({ level: 0 });
   const [incompleteOnly, setIncompleteOnly] = useState(false);
+  const [ecommerceOnly, setEcommerceOnly] = useState(false);
   const [actionQueue, setActionQueue] = useState<ActionItem[]>([]);
   const [popover, setPopover] = useState<{ actions: ActionItem[]; anchorRect: DOMRect } | null>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
@@ -266,9 +270,10 @@ export function EventsPage() {
   // ── Level 0 data ────────────────────────────────────────────────────────────
   const eventChainRows = useMemo(() => computeEventChain(containers), [containers]);
   const filteredEventRows = useMemo(() => eventChainRows.filter((row) => {
+    if (ecommerceOnly && !GA4_ECOMMERCE_EVENT_NAMES.has(row.eventName)) return false;
     if (incompleteOnly && Object.values(row.containers).every((s) => s.chainScore === 3)) return false;
     return true;
-  }), [eventChainRows, incompleteOnly]);
+  }), [eventChainRows, incompleteOnly, ecommerceOnly]);
 
   // ── Narrowed drill states ────────────────────────────────────────────────────
   const drill1 = drill.level >= 1 ? (drill as { level: 1 | 2; eventName: string }) : null;
@@ -440,22 +445,37 @@ export function EventsPage() {
             )}
 
             {/* Breadcrumb */}
-            <div className="flex items-center gap-1.5 text-sm min-w-0 flex-wrap">
-              {breadcrumb.map((crumb, i) => (
-                <span key={i} className="flex items-center gap-1.5">
-                  {i > 0 && <span className="text-muted-fg text-xs">›</span>}
-                  {crumb.onClick ? (
-                    <button
-                      onClick={crumb.onClick}
-                      className="text-muted-fg hover:text-foreground transition-colors font-medium"
-                    >
-                      {crumb.label}
-                    </button>
-                  ) : (
-                    <span className="text-foreground font-semibold truncate">{crumb.label}</span>
-                  )}
-                </span>
-              ))}
+            <div className="flex items-center gap-1 min-w-0 flex-wrap">
+              {breadcrumb.map((crumb, i) => {
+                const isLast = i === breadcrumb.length - 1;
+                return (
+                  <span key={i} className="flex items-center gap-1">
+                    {i > 0 && (
+                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="shrink-0" style={{ color: 'hsl(220 13% 75%)' }}>
+                        <path d="M4.5 2.5L8 6l-3.5 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    )}
+                    {crumb.onClick ? (
+                      <button
+                        onClick={crumb.onClick}
+                        className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors hover:bg-[hsl(220_20%_95%)]"
+                        style={{ borderColor: 'hsl(220 13% 88%)', color: 'hsl(220 13% 45%)' }}
+                      >
+                        {crumb.label}
+                      </button>
+                    ) : (
+                      <span
+                        className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold truncate max-w-[220px] ${isLast ? 'text-white' : ''}`}
+                        style={isLast
+                          ? { backgroundColor: 'hsl(267 100% 59%)' }
+                          : { color: 'hsl(220 13% 25%)', backgroundColor: 'hsl(220 20% 95%)' }}
+                      >
+                        {crumb.label}
+                      </span>
+                    )}
+                  </span>
+                );
+              })}
             </div>
 
             {isLoadingMonitoring && (
@@ -465,15 +485,26 @@ export function EventsPage() {
 
           {/* Level 0 controls */}
           {drill.level === 0 && hasData && (
-            <label className="flex items-center gap-2 text-sm text-muted-fg cursor-pointer select-none shrink-0">
-              <input
-                type="checkbox"
-                checked={incompleteOnly}
-                onChange={(e) => setIncompleteOnly(e.target.checked)}
-                className="rounded"
-              />
-              Incomplets seulement
-            </label>
+            <div className="flex items-center gap-4 shrink-0">
+              <label className="flex items-center gap-2 text-sm text-muted-fg cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={ecommerceOnly}
+                  onChange={(e) => setEcommerceOnly(e.target.checked)}
+                  className="rounded"
+                />
+                Ecommerce GA4 seulement
+              </label>
+              <label className="flex items-center gap-2 text-sm text-muted-fg cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={incompleteOnly}
+                  onChange={(e) => setIncompleteOnly(e.target.checked)}
+                  className="rounded"
+                />
+                Incomplets seulement
+              </label>
+            </div>
           )}
         </div>
 

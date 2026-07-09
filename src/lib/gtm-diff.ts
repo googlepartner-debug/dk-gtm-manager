@@ -62,6 +62,49 @@ function buildDiffEntities(
   });
 }
 
+// ─── Version-to-version diff (Chantier A — réplication depuis un container pilote) ──
+
+export interface VersionContent {
+  tag?: GTMTag[];
+  trigger?: GTMTrigger[];
+  variable?: GTMVariable[];
+}
+
+const ID_KEY: Record<EntityKind, string> = { tag: 'tagId', variable: 'variableId', trigger: 'triggerId' };
+const LIST_KEY: Record<EntityKind, 'tag' | 'trigger' | 'variable'> = { tag: 'tag', variable: 'variable', trigger: 'trigger' };
+
+// Compares two published versions of the SAME container and returns every entity that
+// changed between them (new/modified/removed) — used to isolate exactly what a pilot
+// container's dataLayer adaptation changed, so only that delta gets replicated elsewhere.
+export function diffVersions(before: VersionContent, after: VersionContent): DiffEntity[] {
+  const entities: DiffEntity[] = [];
+
+  for (const kind of ['tag', 'variable', 'trigger'] as EntityKind[]) {
+    const beforeList = (before[LIST_KEY[kind]] ?? []) as unknown as Record<string, unknown>[];
+    const afterList = (after[LIST_KEY[kind]] ?? []) as (GTMTag | GTMVariable | GTMTrigger)[];
+    const beforeMap = extractExisting(beforeList, ID_KEY[kind]);
+
+    entities.push(...buildDiffEntities(kind, afterList, beforeMap));
+
+    const afterNames = new Set(afterList.map((e) => e.name));
+    for (const [name, info] of beforeMap) {
+      if (afterNames.has(name)) continue;
+      entities.push({
+        key: `${kind}::${name}`,
+        kind,
+        name,
+        status: 'removed',
+        selected: false, // replicating a deletion is an explicit, separate choice — never automatic
+        existingId: info.id,
+        proposed: info.raw as unknown as GTMTag | GTMVariable | GTMTrigger,
+        current: info.raw as unknown as GTMTag | GTMVariable | GTMTrigger,
+      });
+    }
+  }
+
+  return entities;
+}
+
 export async function computeContainerDiff(
   token: string,
   accountId: string,

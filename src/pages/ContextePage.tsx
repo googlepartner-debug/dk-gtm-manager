@@ -155,7 +155,7 @@ function ContextePage() {
     containerData.forEach((container) => {
       container.tags.forEach((tag) => {
         if (tag.type === 'gaawe') {
-          const eventParam = tag.parameter?.find((p) => p.key === 'event_name');
+          const eventParam = tag.parameter?.find((p) => p.key === 'event_name' || p.key === 'eventName');
           if (eventParam?.value) {
             events.add(eventParam.value);
           }

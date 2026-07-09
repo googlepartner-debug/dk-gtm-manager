@@ -1,4 +1,4 @@
-import type { GTMAccount, GTMContainer, GTMWorkspace, GTMTag, GTMVariable, GTMTrigger } from '../types/gtm';
+import type { GTMAccount, GTMContainer, GTMWorkspace, GTMTag, GTMVariable, GTMTrigger, GTMCustomTemplate, GTMGtagConfig } from '../types/gtm';
 
 const BASE = 'https://tagmanager.googleapis.com/tagmanager/v2';
 
@@ -75,6 +75,31 @@ export async function listContainers(token: string, accountId: string): Promise<
   return containers;
 }
 
+export async function updateContainer(
+  token: string,
+  accountId: string,
+  containerId: string,
+  container: { name: string; usageContext: string[] }
+): Promise<GTMContainer> {
+  return request<GTMContainer>(
+    `/accounts/${accountId}/containers/${containerId}`,
+    token,
+    { method: 'PUT', body: JSON.stringify(container) }
+  );
+}
+
+export async function updateAccount(
+  token: string,
+  accountId: string,
+  account: { name: string }
+): Promise<GTMAccount> {
+  return request<GTMAccount>(
+    `/accounts/${accountId}`,
+    token,
+    { method: 'PUT', body: JSON.stringify(account) }
+  );
+}
+
 // ─── Workspaces ───────────────────────────────────────────────────────────────
 
 export async function createWorkspace(
@@ -99,13 +124,34 @@ export async function getDefaultWorkspace(
   accountId: string,
   containerId: string
 ): Promise<GTMWorkspace> {
+  const workspaces = await listWorkspaces(token, accountId, containerId);
+  // Use "Default Workspace" if present, otherwise first
+  return workspaces.find((w) => w.name === 'Default Workspace') ?? workspaces[0];
+}
+
+export async function listWorkspaces(
+  token: string,
+  accountId: string,
+  containerId: string
+): Promise<GTMWorkspace[]> {
   const data = await request<{ workspace?: GTMWorkspace[] }>(
     `/accounts/${accountId}/containers/${containerId}/workspaces`,
     token
   );
-  const workspaces = data.workspace ?? [];
-  // Use "Default Workspace" if present, otherwise first
-  return workspaces.find((w) => w.name === 'Default Workspace') ?? workspaces[0];
+  return data.workspace ?? [];
+}
+
+// Returns the list of entities changed in a workspace. Empty = blank/clean workspace.
+export async function getWorkspaceStatus(
+  token: string,
+  accountId: string,
+  containerId: string,
+  workspaceId: string
+): Promise<{ workspaceChange?: unknown[] }> {
+  return request(
+    `/accounts/${accountId}/containers/${containerId}/workspaces/${workspaceId}/status`,
+    token
+  );
 }
 
 // ─── Tags ─────────────────────────────────────────────────────────────────────
@@ -324,13 +370,16 @@ export async function deleteTag(
 
 // ─── Live version (publication date) ─────────────────────────────────────────
 
+// Returns the full live version content (tag[]/trigger[]/variable[] + fingerprint) in ONE call —
+// used both for publication-date enrichment (fingerprint only) and, more importantly, as a
+// single-call alternative to workspace + 3 list calls when scanning Monitoring.
 export async function getLiveVersion(
   token: string,
   accountId: string,
   containerId: string
-): Promise<{ fingerprint?: string } | null> {
+): Promise<GTMVersionContent | null> {
   try {
-    const data = await request<{ fingerprint?: string }>(
+    const data = await request<GTMVersionContent>(
       `/accounts/${accountId}/containers/${containerId}/versions:live`,
       token
     );
@@ -341,6 +390,75 @@ export async function getLiveVersion(
 }
 
 // ─── Version + Publish ────────────────────────────────────────────────────────
+
+export interface GTMVersionHeader {
+  containerVersionId: string;
+  name?: string;
+  numTags?: string;
+  numTriggers?: string;
+  numVariables?: string;
+}
+
+export async function listVersionHeaders(
+  token: string,
+  accountId: string,
+  containerId: string
+): Promise<GTMVersionHeader[]> {
+  const data = await request<{ containerVersionHeader?: GTMVersionHeader[] }>(
+    `/accounts/${accountId}/containers/${containerId}/version_headers`,
+    token
+  );
+  return data.containerVersionHeader ?? [];
+}
+
+export interface GTMVersionContent {
+  containerVersionId: string;
+  name?: string;
+  fingerprint?: string;
+  tag?: GTMTag[];
+  trigger?: GTMTrigger[];
+  variable?: GTMVariable[];
+  customTemplate?: GTMCustomTemplate[];
+  gtagConfig?: GTMGtagConfig[];
+}
+
+export async function getVersion(
+  token: string,
+  accountId: string,
+  containerId: string,
+  versionId: string
+): Promise<GTMVersionContent> {
+  return request(
+    `/accounts/${accountId}/containers/${containerId}/versions/${versionId}`,
+    token
+  );
+}
+
+export async function listTemplates(
+  token: string,
+  accountId: string,
+  containerId: string,
+  workspaceId: string
+): Promise<GTMCustomTemplate[]> {
+  const data = await request<{ template?: GTMCustomTemplate[] }>(
+    `/accounts/${accountId}/containers/${containerId}/workspaces/${workspaceId}/templates`,
+    token
+  );
+  return data.template ?? [];
+}
+
+export async function listGtagConfig(
+  token: string,
+  accountId: string,
+  containerId: string,
+  workspaceId: string
+): Promise<GTMGtagConfig[]> {
+  const data = await request<{ gtagConfig?: GTMGtagConfig[] }>(
+    `/accounts/${accountId}/containers/${containerId}/workspaces/${workspaceId}/gtag_config`,
+    token
+  );
+  return data.gtagConfig ?? [];
+}
 
 export async function createVersion(
   token: string,

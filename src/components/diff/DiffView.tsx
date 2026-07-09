@@ -8,12 +8,14 @@ const STATUS_LABEL: Record<EntityStatus, string> = {
   new: 'Nouveau',
   modified: 'Modifié',
   unchanged: 'Inchangé',
+  removed: 'Supprimé',
 };
 
-const STATUS_BADGE: Record<EntityStatus, 'success' | 'warning' | 'default'> = {
+const STATUS_BADGE: Record<EntityStatus, 'success' | 'warning' | 'default' | 'error'> = {
   new: 'success',
   modified: 'warning',
   unchanged: 'default',
+  removed: 'error',
 };
 
 const KIND_LABEL = { tag: 'Tag', variable: 'Variable', trigger: 'Déclencheur' };
@@ -30,7 +32,7 @@ function getEventName(entity: DiffEntity): string | null {
   if (entity.kind !== 'tag') return null;
   const tag = entity.proposed as GTMTag;
   if (tag.type !== 'gaawe') return null;
-  return tag.parameter?.find((p) => p.key === 'event_name')?.value ?? null;
+  return tag.parameter?.find((p) => p.key === 'event_name' || p.key === 'eventName')?.value ?? null;
 }
 
 function extractEventNames(diffs: ContainerDiff[]): string[] {

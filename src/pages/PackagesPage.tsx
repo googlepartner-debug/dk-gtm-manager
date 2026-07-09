@@ -4,6 +4,7 @@ import { useGTMStore } from '../store/gtm-store';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { EntityDrawer } from '../components/packages/EntityDrawer';
+import { VersionDiffFlow } from '../components/packages/VersionDiffFlow';
 import { TAG_TYPES, VARIABLE_TYPES, TRIGGER_TYPES } from '../data/gtm-entity-types';
 import { PACKAGE_TEMPLATES } from '../data/package-templates';
 import type { DeploymentPackage, GTMTag, GTMVariable, GTMTrigger } from '../types/gtm';
@@ -78,7 +79,7 @@ function PackageEditor({ pkg, onBack }: { pkg: DeploymentPackage; onBack: () => 
     const q = eventSearch.toLowerCase();
     return currentList.filter((entity) => {
       const tag = entity as GTMTag;
-      const eventName = tag.parameter?.find((p) => p.key === 'event_name')?.value ?? '';
+      const eventName = tag.parameter?.find((p) => p.key === 'event_name' || p.key === 'eventName')?.value ?? '';
       return (
         eventName.toLowerCase().includes(q) ||
         tag.name.toLowerCase().includes(q)
@@ -187,7 +188,7 @@ function PackageEditor({ pkg, onBack }: { pkg: DeploymentPackage; onBack: () => 
             <div className="space-y-2">
               {filteredList.map((entity, i) => {
                 const realIndex = currentList.indexOf(entity);
-                const eventName = (entity as GTMTag).parameter?.find((p) => p.key === 'event_name')?.value;
+                const eventName = (entity as GTMTag).parameter?.find((p) => p.key === 'event_name' || p.key === 'eventName')?.value;
                 return (
                 <div
                   key={realIndex}
@@ -279,6 +280,7 @@ export function PackagesPage() {
   const navigate = useNavigate();
   const [editingPkg, setEditingPkg] = useState<DeploymentPackage | null>(null);
   const [showTemplates, setShowTemplates] = useState(false);
+  const [showVersionDiff, setShowVersionDiff] = useState(false);
 
   function openNew() {
     const pkg: DeploymentPackage = { ...EMPTY_PACKAGE, id: crypto.randomUUID(), createdAt: new Date().toISOString(), entities: { tags: [], variables: [], triggers: [] } };
@@ -315,6 +317,10 @@ export function PackagesPage() {
     return <PackageEditor pkg={editingPkg} onBack={() => setEditingPkg(null)} />;
   }
 
+  if (showVersionDiff) {
+    return <VersionDiffFlow onDone={() => setShowVersionDiff(false)} />;
+  }
+
   return (
     <div className="max-w-3xl">
       <div className="mb-6 flex items-center justify-between">
@@ -332,6 +338,12 @@ export function PackagesPage() {
               Importer JSON
             </span>
           </label>
+          <Button variant="secondary" onClick={() => setShowVersionDiff(true)}>
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <path d="M4 2v10M10 2v10M2 5h4M8 9h4" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round"/>
+            </svg>
+            Comparer deux versions
+          </Button>
           <Button variant="secondary" onClick={() => setShowTemplates(true)}>
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
               <rect x="1" y="1" width="12" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.25"/>

@@ -197,9 +197,7 @@ export function CleaningTab({ containers }: { containers: MonitoringContainerDat
     if (kinds.variable > 0) parts.push(`${kinds.variable} variable${kinds.variable > 1 ? 's' : ''}`);
     if (kinds.trigger > 0) parts.push(`${kinds.trigger} déclencheur${kinds.trigger > 1 ? 's' : ''}`);
     if (kinds.tag > 0) parts.push(`${kinds.tag} tag${kinds.tag > 1 ? 's' : ''}`);
-    const d = new Date();
-    const dateStr = d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
-    return `Nettoyage — ${parts.join(', ')} — ${dateStr}`;
+    return `Nettoyage — ${parts.join(', ')}`;
   }
 
   function buildDefaultDescription(): string {
@@ -612,7 +610,8 @@ export function CleaningTab({ containers }: { containers: MonitoringContainerDat
                 <button
                   disabled={!versionName.trim()}
                   onClick={() => {
-                    if (!accessToken || !versionName.trim()) return;
+                    if (!versionName.trim()) return;
+                    if (!accessToken) { setErrorNotif('Session GTM expirée ou absente — reconnecte-toi puis réessaie.'); return; }
                     setShowConfirm(false);
                     applyDeletions(accessToken, { versionName: versionName.trim(), description: versionDesc.trim() });
                   }}

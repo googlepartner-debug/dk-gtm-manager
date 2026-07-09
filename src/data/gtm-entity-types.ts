@@ -32,10 +32,9 @@ export const TAG_TYPES: EntityTypeDef[] = [
     category: 'Google',
     icon: 'G4',
     fields: [
-      { key: 'measurement_id', label: 'Measurement ID', fieldType: 'text', placeholder: '{{GA4 Measurement ID}}', required: true },
-      { key: 'event_name', label: "Nom de l'événement", fieldType: 'text', placeholder: 'purchase', required: true },
-      { key: 'ecommerce_object', label: 'Objet ecommerce (DL)', fieldType: 'text', placeholder: '{{dlv - ecommerce}}', hint: 'Optionnel — variable de couche de données' },
-      { key: 'event_parameters', label: 'Paramètres événement', fieldType: 'params-list', hint: 'Paires clé/valeur envoyées avec l\'événement' },
+      { key: 'eventName', label: "Nom de l'événement", fieldType: 'text', placeholder: 'purchase', required: true },
+      { key: 'measurementIdOverride', label: 'Measurement ID (override)', fieldType: 'text', placeholder: '{{GA4 Measurement ID}}', hint: 'Optionnel — laisser vide pour utiliser le Google tag déjà présent dans le container' },
+      { key: 'eventParameters', label: 'Paramètres événement', fieldType: 'params-list', hint: 'Paires clé/valeur envoyées avec l\'événement (currency, value, items, transaction_id…)' },
     ],
   },
   {
@@ -283,7 +282,18 @@ export function paramsToForm(params: GTMParameter[] = []): FormValues {
   for (const p of params) {
     if (!p.key) continue;
     if (p.type === 'boolean') form[p.key] = p.value === 'true';
-    else if (p.type === 'list') {
+    else if (p.type === 'list' && p.key === 'eventSettingsTable') {
+      // Older GA4 Event tag template — same concept as "eventParameters" but with
+      // parameter/parameterValue map keys instead of name/value. Normalize into the
+      // same form shape (and the same form key) so editing works regardless of which
+      // convention the tag was originally built with; saving always writes it back
+      // out as "eventParameters" (see formToParams / TAG_TYPES gaawe fields).
+      form['eventParameters'] = (p.list ?? []).map((item) => {
+        const nameParam = item.map?.find((m) => m.key === 'parameter');
+        const valueParam = item.map?.find((m) => m.key === 'parameterValue');
+        return { name: nameParam?.value ?? '', value: valueParam?.value ?? '' };
+      });
+    } else if (p.type === 'list') {
       form[p.key] = (p.list ?? []).map((item) => {
         const nameParam = item.map?.find((m) => m.key === 'name');
         const valueParam = item.map?.find((m) => m.key === 'value');

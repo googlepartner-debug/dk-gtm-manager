@@ -1,4 +1,4 @@
-import type { GTMTag, GTMTrigger, GTMVariable } from '../types/gtm';
+import type { GTMTag, GTMTrigger, GTMVariable, GTMCustomTemplate, GTMGtagConfig } from '../types/gtm';
 
 export interface MonitoringContainerData {
   containerId: string;
@@ -8,6 +8,8 @@ export interface MonitoringContainerData {
   tags: GTMTag[];
   triggers: GTMTrigger[];
   variables: GTMVariable[];
+  templates?: GTMCustomTemplate[];
+  gtagConfigs?: GTMGtagConfig[];
   scannedAt: string;
 }
 

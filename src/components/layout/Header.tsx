@@ -16,7 +16,7 @@ export function Header() {
   return (
     <header className="h-14 bg-card border-b border-border flex items-center px-5 gap-4 shrink-0 sticky top-0 z-10" style={{ backdropFilter: 'blur(4px)' }}>
       {/* DK GTM Logo */}
-      <DKGTMLogo variant="light" size="sm" showProduct={false} />
+      <DKGTMLogo variant="light" size="sm" />
 
       {/* Account pill */}
       {account && (

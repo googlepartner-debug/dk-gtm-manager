@@ -36,6 +36,33 @@ export interface GTMTag {
   tagFiringOption?: string;
   monitoringMetadata?: { type: string };
   notes?: string;
+  paused?: boolean;
+}
+
+// A tag instantiated from a Community/Custom Template has type "cvt_<templateId>" instead of a
+// native GTM type string — resolving the template's name/gallery origin is the most reliable way
+// to know its real destination platform (e.g. "Meta Ads Conversions API Tag" from the Meta gallery
+// template), more reliable than guessing from the tag's name or minified code.
+export interface GTMCustomTemplate {
+  templateId?: string;
+  name?: string;
+  galleryReference?: {
+    owner?: string;
+    repository?: string;
+    version?: string;
+    isModified?: boolean;
+  };
+}
+
+// The newer "Google tag" GTM feature: a container-level config (e.g. a GA4 property's G-XXXXXXX,
+// or a Google Ads account's AW-XXXXXXX) that a GA4 Configuration tag can reference instead of
+// carrying its own measurementId — shown in the GTM UI as "This tag will use the configuration
+// of Google tag X". Distinct API resource from Tag; the destination ID lives somewhere in its
+// parameter array under a key that isn't documented, so callers scan all parameter values.
+export interface GTMGtagConfig {
+  gtagConfigId?: string;
+  type?: string;
+  parameter?: GTMParameter[];
 }
 
 export interface GTMVariable {
@@ -110,7 +137,7 @@ export interface DeploymentRecord {
 // ─── Diff ─────────────────────────────────────────────────────────────────────
 
 export type EntityKind = 'tag' | 'variable' | 'trigger';
-export type EntityStatus = 'new' | 'modified' | 'unchanged';
+export type EntityStatus = 'new' | 'modified' | 'unchanged' | 'removed';
 
 export interface DiffEntity {
   key: string; // unique: `${kind}::${name}`
@@ -183,6 +210,34 @@ export interface DeletionOperation {
   createdAt: string;
 }
 
+// ─── Tag duplication queue ─────────────────────────────────────────────────────
+
+export interface TagDuplicationOperation {
+  id: string;
+  containerId: string;
+  containerName: string;
+  publicId: string;
+  tag: GTMTag; // name/type/parameter/notes — no firingTriggerId yet, resolved at apply time
+  linkedTriggerIds: string[];       // trigger IDs already present in the target container
+  triggersToCreate: GTMTrigger[];   // triggers to create then link
+  sourceContainerName: string;
+  status: 'pending' | 'applied' | 'failed';
+  createdAt: string;
+  error?: string;
+}
+
+export interface VariableDuplicationOperation {
+  id: string;
+  containerId: string;
+  containerName: string;
+  publicId: string;
+  variable: GTMVariable; // name/type/parameter — no ID yet
+  sourceContainerName: string;
+  status: 'pending' | 'applied' | 'failed';
+  createdAt: string;
+  error?: string;
+}
+
 // ─── Container / Account rename queue ────────────────────────────────────────
 
 export interface ContainerRenameOperation {
@@ -194,8 +249,9 @@ export interface ContainerRenameOperation {
   publicId?: string;
   oldName: string;
   newName: string;
-  status: 'pending' | 'applied' | 'cancelled';
+  status: 'pending' | 'applied' | 'cancelled' | 'failed';
   createdAt: string;
+  error?: string;
 }
 
 // ─── Event chain (GA4 audit) ──────────────────────────────────────────────────

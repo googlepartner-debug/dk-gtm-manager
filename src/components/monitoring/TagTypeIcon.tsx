@@ -15,7 +15,11 @@ const LOGO_MAP: Record<string, string> = {
   'Piano':      '/tag-types/piano.png',
   'Matomo':     '/tag-types/matomo.png',
   'LinkedIn':   '/tag-types/linkedin.png',
-  'Microsoft':  '/tag-types/microsoft.png',
+  'Microsoft Ads': '/tag-types/microsoft.png',
+  'Meta Pixel': '/tag-types/meta-pixel.svg',
+  'TikTok':     '/tag-types/tiktok.png',
+  'Hotjar':     '/tag-types/hotjar.png',
+  'Microsoft Clarity': '/tag-types/microsoft-clarity.png',
   'HTML Custom':'/tag-types/custom.svg',
 };
 
@@ -23,9 +27,12 @@ const LOGO_MAP: Record<string, string> = {
 const FALLBACK_CONFIG: Record<string, { bg: string; label: string }> = {
   'Kameleoon':  { bg: '#6B3FA0', label: 'K' },
   'AB Tasty':   { bg: '#E91E63', label: 'AB' },
-  'Meta Pixel': { bg: '#1877F2', label: 'f' },
-  'TikTok':     { bg: '#010101', label: 'TT' },
-  'Hotjar':     { bg: '#FD3A5C', label: 'H' },
+  'Criteo':     { bg: '#F86D00', label: 'C' },
+  'LinkedIn':   { bg: '#0A66C2', label: 'in' },
+  'Pinterest':  { bg: '#E60023', label: 'P' },
+  'Snapchat':   { bg: '#FFFC00', label: 'SC' },
+  'CMP':        { bg: '#0F9D58', label: 'CMP' },
+  'Custom Template': { bg: '#607D8B', label: 'CT' },
 };
 
 export function TagTypeIcon({ category, size = 20 }: Props) {

@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { clsx } from 'clsx';
 import { FeedbackDrawer } from '../ui/FeedbackDrawer';
-import { DKGTMLogo } from '../ui/DKGTMLogo';
 import { useGTMStore } from '../../store/gtm-store';
 
 const nav = [
@@ -93,11 +92,6 @@ export function Sidebar() {
 
   return (
     <aside className="w-52 shrink-0 flex flex-col border-r border-sidebar-border bg-sidebar-bg">
-      {/* Logo */}
-      <div className="px-4 py-4 border-b border-sidebar-border">
-        <DKGTMLogo variant="light" size="sm" />
-      </div>
-
       {/* Nav */}
       <nav className="flex-1 px-3 py-3 space-y-0.5">
         {nav.map((item) => {

@@ -1,29 +1,6 @@
 import type { MonitoringContainerData } from '../data/monitoring-mock';
-import type { GTMTag } from '../types/gtm';
-
-function detectTagCategory(tag: GTMTag): string {
-  if (tag.type === 'gaawe' || tag.type === 'gaawc') return 'GA4';
-  if (tag.type === 'awct') return 'Google Ads';
-  if (tag.type === 'flc') return 'Floodlight';
-  if (tag.type === 'html') {
-    const html = (tag.parameter?.find((p) => p.key === 'html')?.value ?? '').toLowerCase();
-    if (html.includes('kameleoon')) return 'Kameleoon';
-    if (html.includes('abtasty')) return 'AB Tasty';
-    if (html.includes("fbq(") || html.includes('facebook')) return 'Meta Pixel';
-    if (html.includes('tiktok') || html.includes('ttq.load')) return 'TikTok';
-    if (html.includes('hotjar') || html.includes('hjid')) return 'Hotjar';
-    return 'HTML Custom';
-  }
-  return 'HTML Custom';
-}
-
-function getTagRowKey(tag: GTMTag, category: string): string {
-  if (category === 'GA4' && tag.type === 'gaawe') {
-    return tag.parameter?.find((p) => p.key === 'event_name')?.value ?? tag.name;
-  }
-  if (category === 'GA4' && tag.type === 'gaawc') return 'GA4 Configuration';
-  return tag.name;
-}
+import { detectTagCategory, getTagRowKey } from './gtm-matrix';
+import { flattenGA4EventParams } from './ga4-event-params';
 
 interface CoverageRow {
   key: string;
@@ -35,7 +12,7 @@ function buildTagCoverage(containers: MonitoringContainerData[]): CoverageRow[] 
   const rowMap = new Map<string, CoverageRow>();
   for (const c of containers) {
     for (const tag of c.tags) {
-      const cat = detectTagCategory(tag);
+      const cat = detectTagCategory(tag, c.templates);
       const rowKey = getTagRowKey(tag, cat);
       const mapKey = `${cat}::${rowKey}`;
       if (!rowMap.has(mapKey)) {
@@ -65,19 +42,18 @@ function detectParamAnomalies(containers: MonitoringContainerData[]): ParamAnoma
   for (const c of containers) {
     for (const tag of c.tags) {
       if (tag.type !== 'gaawe') continue;
-      const event = tag.parameter?.find((p) => p.key === 'event_name')?.value ?? '';
+      const flat = flattenGA4EventParams(tag);
+      const event = flat.event_name ?? flat.eventName ?? '';
       const expectedParams = GA4_STANDARD_PARAMS[event];
       if (!expectedParams) continue;
-      const presentKeys = new Set((tag.parameter ?? []).map((p) => p.key));
       for (const expected of expectedParams) {
-        if (!presentKeys.has(expected)) {
+        if (flat[expected] === undefined) {
           anomalies.push({ event, container: c.containerName, issue: `Paramètre manquant : ${expected}` });
         }
       }
       // Detect hardcoded currency
-      const currencyParam = tag.parameter?.find((p) => p.key === 'currency');
-      if (currencyParam && currencyParam.value && !currencyParam.value.startsWith('{{')) {
-        anomalies.push({ event, container: c.containerName, issue: `currency hardcodé : "${currencyParam.value}"` });
+      if (flat.currency && !flat.currency.startsWith('{{')) {
+        anomalies.push({ event, container: c.containerName, issue: `currency hardcodé : "${flat.currency}"` });
       }
     }
   }
