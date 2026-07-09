@@ -24,10 +24,13 @@ src/
     gtm-entity-types.ts — définitions des types GTM avec champs de formulaire
     monitoring-mock.ts  — 5 containers simulés (TK, AF, COR, IBE, SWI) avec écarts intentionnels
   lib/
-    auth.ts        — helpers OAuth Google
-    gtm-api.ts     — appels API GTM (requiert accessToken)
-    gtm-diff.ts    — calcul de diff entre package et état GTM live
-    storage.ts     — localStorage pour packages et historique
+    auth.ts             — helpers OAuth Google
+    gtm-api.ts          — appels API GTM (requiert accessToken) : tags/triggers/variables/templates/gtag_config/versions
+    gtm-diff.ts         — calcul de diff entre package et état GTM live + diffVersions (version publiée vs version publiée)
+    gtm-matrix.ts       — détection de plateforme/catégorie partagée (Monitoring, Distribution, export PDF) — voir [[monitoring]]
+    ga4-event-params.ts — flattenGA4EventParams() : aplatit les deux conventions réelles de paramètres GA4 Event (eventParameters / eventSettingsTable)
+    export-monitoring.ts — génération du rapport HTML imprimable
+    storage.ts          — localStorage pour packages et historique
   pages/
     Dashboard.tsx      — loader initial, appel fetchAccounts
     ContainersPage.tsx — sélection compte + containers, combobox, tri, bulk rename
@@ -59,5 +62,9 @@ src/
 **Profils multi-utilisateurs** : `useProfileStore` (Zustand persist) gère les profils nommés. Chaque profil a un `id` UUID et `colorIndex`. Le localStorage du monitoring est namespaced `dk_gtm_monitoring_v1_${profileId}`. Page `/profile` pour créer/gérer les profils. Le profil actif est affiché dans le header.
 
 **applyPublishErrors** : après `applyDeletions`, les erreurs de publish sont capturées dans `applyPublishErrors[]` (nom du container + message) et affichées en notification rouge dans CleaningTab.
+
+**Publication unifiée** : `applyContainerQueue(token, containerId, {versionName, description})` regroupe pour UN container tous les types d'actions en attente (renommages, opérations déclencheurs, duplications tag/variable) et les publie en un seul workspace vierge + une seule version. Remplace l'ancien design de modales de publication par feature.
+
+**Détection de types GTM natifs non-évidents** : plusieurs types de tags supposés (`awrk`, `clmb`, `gaawc`) se sont révélés faux sur le compte de test réel — les vrais types (`sp`, `gclidw`, `googtag`) sont acceptés en plus des types supposés partout où c'est pertinent (`gtm-matrix.ts`, `DistributionTab.tsx`, `RecommendationsTab.tsx`). Toujours vérifier une hypothèse de type/paramètre GTM sur des données réellement scannées (log ciblé) avant de coder dessus — la doc publique de l'API GTM est souvent incomplète ou absente sur ces détails.
 
 Voir [[auth-strategy]] pour le plan OAuth. Voir [[deployment-flow]] pour le workflow complet. Voir [[monitoring]] pour la logique de la page Monitoring.

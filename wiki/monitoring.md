@@ -6,8 +6,8 @@ Page `/dashboard/monitoring`. Objectif : visualiser la présence et le contenu d
 
 ### Tags
 - Matrice : lignes = tags (rowKey = `event_name` pour les tags GA4, nom du tag pour les autres), colonnes = containers
-- Filtre par catégorie : GA4, Google Ads, Floodlight, Kameleoon, AB Tasty, Meta Pixel, TikTok, Hotjar, HTML Custom
-- Détection de catégorie pour les tags HTML : scan du contenu du paramètre `html`
+- Filtre par catégorie : GA4, Google Ads, Floodlight, Kameleoon, AB Tasty, Meta Pixel, TikTok, LinkedIn, Pinterest, Snapchat, Microsoft Ads, Microsoft Clarity, Piano, Matomo, Hotjar, Criteo, CMP, Consent Mode, HTML Custom, Custom Template
+- Détection de catégorie : `detectTagCategory()` dans `src/lib/gtm-matrix.ts` (partagé avec Distribution et l'export PDF) — types natifs GTM en premier (dont les types réels du compte de test, pas seulement ceux documentés : `sp`=Remarketing, `gclidw`=Conversion Linker, `baut`=Microsoft UET, `googtag`=Google tag unifié GA4/Ads), puis cascade de mots-clés sur nom+code+référence de template pour les tags Custom HTML et Community Template (`cvt_...`, résolus via `customTemplate[]` scanné par container)
 - Badge "noms variés" si le même event est tracké sous des noms différents selon les containers
 - Badge "déclencheurs variés" si les triggers diffèrent sémantiquement entre containers (comparaison type+conditions, pas les noms)
 - Clic sur une ligne → **TagDrawer** (2 onglets : Déclencheurs + Renommer)
@@ -102,5 +102,26 @@ Modal 640px redessinée : pills containers en header, tableau unifié par contai
 
 ## Données
 
-Actuellement sur `src/data/monitoring-mock.ts` (5 containers simulés avec écarts intentionnels).
-Passage aux données live : appeler `listTagsFull` / `listVariablesFull` / `listTriggersFull` après GCP OAuth, remplacer `MONITORING_MOCK` par le résultat. Voir [[deferred-features]].
+Live depuis l'OAuth (2026-07-02) : `scanMonitoring` récupère par container tags/triggers/variables (fast-path via `getLiveVersion`, fallback workspace si jamais publié) + `customTemplate[]` + `gtagConfig[]`. `monitoring-mock.ts` reste le jeu de données de démo (5 containers avec écarts intentionnels), utilisé hors connexion.
+
+## Onglet Distribution
+
+`DistributionTab.tsx` : diagramme de flux tag → destination par plateforme, un diagramme par container (bouton d'agrandissement → vue plein écran).
+
+- **Résolution de destination** : ID littéral, ou variable Constante résolue (affiche l'ID réel, pas le nom de variable), ou repli `gtag_config` pour un tag GA4 Config sans ID propre (mode auto-détection "Google tag lié" — ne fonctionne que si ce Google tag vit dans le container scanné, pas dans un container séparé), ou recherche générique par nom de clé de paramètre (`findIdLikeParamValue`) pour les tags sans code
+- **Normalisation Google Ads** : `1059038729` et `AW-1059038729` reconnus comme la même destination
+- **Regroupement** : plateformes à instance unique par page (Meta Pixel, TikTok, Pinterest, Snapchat, LinkedIn, Microsoft Ads, Microsoft Clarity) fusionnées en un seul nœud par container même si certains tags n'ont pas leur propre ID ; Conversion Linker et GA4 Config sans ID repliés dans le vrai nœud de la même plateforme plutôt que de former une branche "non détectée" isolée ; tri fixe par plateforme (mêmes plateformes groupées, même ordre entre containers)
+- **CMP vs Consent Mode** : les tags de plateforme de consentement (CMP - Script, etc.) ont leur propre branche (vrai tiers) ; les signaux `gtag('consent', 'default'/'update', ...)` sont exclus du graphe (ils ne font que configurer GA4/Ads localement, aucun envoi à un tiers)
+- **AlertBar** : divergence de couverture d'events GA4 entre containers, divergence de destinations par plateforme
+
+## Onglet Recommandations
+
+`RecommendationsTab.tsx` : moteur de règles générant des recommandations priorisées (critique/attention/info) par plateforme, à partir des données scannées.
+
+- Règles historiques : Conversion Linker/Remarketing absent (reconnaît aussi les implémentations Custom HTML, pas seulement les types natifs), Enhanced Conversions non configurées, double page_view GA4, user_id absent sur events e-commerce, siteId Piano/Matomo non détecté
+- **PII non hashée** : email/téléphone en clair détecté par plateforme (Google Ads, Meta, TikTok, Pinterest, Snapchat, LinkedIn, GA4) — sévérité critique si la plateforme n'a pas de hachage automatique documenté côté serveur, attention sinon (le risque est alors la visibilité en clair dans le container, pas le transport)
+- **Qualité de mesure / double comptage** : même `conversionId`/Pixel ID dupliqué sur plusieurs tags actifs, double `fbq('init', ...)` Meta sur un même container, valeur/devise e-commerce codée en dur au lieu d'une variable Data Layer, couverture d'events GA4 inégale entre containers
+
+## Paramètres GA4 imbriqués
+
+Les paramètres d'un tag GA4 Event (currency, value, items, transaction_id…) ne sont pas des `tag.parameter` plats — GTM les imbrique dans une LIST/MAP, sous l'une de deux conventions réelles selon l'ancienneté du template GA4 : `eventParameters` (clés `name`/`value`) ou `eventSettingsTable` (clés `parameter`/`parameterValue`). `flattenGA4EventParams()` (`src/lib/ga4-event-params.ts`) aplatit les deux formes en un seul objet — utilisé partout où un paramètre GA4 event est lu (ParamMatrixTab, Recommandations, export PDF).

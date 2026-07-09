@@ -373,3 +373,56 @@ Ajout de skills `.claude/skills/google-tagmanager` et `.claude/skills/ui-ux-pro-
 **Dette de documentation**
 
 Cette entrée couvre a posteriori le commit `7975908` (2026-07-06), qui regroupait plusieurs jours de travail non documentés au fur et à mesure. `CLAUDE.md` et le wiki (`auth-strategy.md`, `deferred-features.md`) ont été corrigés en même temps — ils décrivaient encore l'OAuth comme non configuré.
+
+---
+
+## 2026-07-09 — Publication unifiée, détection PII, Distribution fiabilisée sur données réelles
+
+**Contexte** : première session de test intensif sur un compte réel (Noviscore, 4 containers) après la mise en ligne de l'OAuth. Beaucoup de bugs de détection découverts en confrontant les hypothèses de départ (types GTM natifs supposés, structure des paramètres) aux vraies données scannées — corrigés un par un par vérification empirique (log ciblé + confirmation utilisateur) plutôt que par supposition.
+
+**Déploiement unifié**
+
+Toutes les actions en attente issues de Monitoring (renommages, opérations déclencheurs, duplications de tag/variable) sont maintenant regroupées par container et publiées en un seul CTA "Publier" sur la page Déployer, via un workspace vierge dédié par container (`resolveBlankWorkspace`) plutôt qu'en écrivant dans le Workspace par défaut partagé entre consultants. Ancien design (modales de publication éparpillées par feature) supprimé.
+
+**Packages — nouveaux flux**
+
+- Diff entre deux versions publiées d'un même container → génération d'un nouveau package (les entités supprimées ne sont jamais auto-sélectionnées, le format package ne sait pas représenter une suppression)
+- Duplication de variables entre containers (même mécanisme que la duplication de tags déjà existante)
+
+**Recommandations — nouvelles règles**
+
+- **PII non hashée** : détecte email/téléphone en clair dans les tags (Google Ads, Meta, TikTok, Pinterest, Snapchat, LinkedIn, GA4), sévérité ajustée selon que la plateforme documente un hachage automatique côté client (attention) ou l'exige manuellement côté serveur sans filet (critique) — recherché dans la documentation officielle de chaque plateforme avant implémentation, pas deviné
+- **Qualité de mesure** : même `conversionId`/Pixel ID dupliqué sur plusieurs tags (double comptage), double `fbq('init', ...)` Meta, valeur/devise e-commerce codée en dur, couverture d'events GA4 inégale entre containers
+- Règles "Conversion Linker absent" / "Remarketing absent" élargies pour reconnaître les implémentations Custom HTML, pas seulement les types natifs
+
+**Détection de plateforme centralisée (`src/lib/gtm-matrix.ts`)**
+
+Nouveau module partagé par Monitoring, Distribution et l'export PDF (avant : 3 implémentations séparées et désynchronisées). Points clés découverts en confrontant le code aux vraies données du compte de test :
+- Les tags issus d'un Custom/Community Template (`type: "cvt_..."`) n'ont pas de corps HTML — leur plateforme réelle se déduit du nom + de la référence de galerie du template (`customTemplate[]`, désormais scanné et stocké par container), pas du code
+- Plusieurs types "natifs" supposés se sont révélés faux pour ce compte : le Remarketing Google Ads est en réalité `sp` (pas `awrk`), le Conversion Linker est `gclidw` (pas `clmb`), Microsoft UET est `baut`. Les deux formes sont maintenant acceptées partout
+- Le tag GA4 Configuration (`gaawc`) est remplacé sur les containers récents par un tag unifié `googtag` (bascule GTM de septembre 2023) — une seule ressource dont la plateforme réelle (GA4 ou Google Ads) dépend du préfixe de son `tagId` résolu
+- Tolérance aux variantes de nommage sans séparateur ("GoogleAds", "MetaPixel") et au token "fb" isolé (convention agence)
+- Nouvelles catégories : Microsoft Ads, Microsoft Clarity, CMP (plateforme de consentement — vrai tiers), distinctes de "Consent Mode" (signal `gtag('consent', ...)` qui ne fait que configurer GA4/Ads localement, n'envoie rien à un tiers)
+
+**Paramètres GA4 (`src/lib/ga4-event-params.ts`)**
+
+Les paramètres d'un tag GA4 Event (currency, value, items, transaction_id…) ne sont pas des paramètres plats — GTM les imbrique dans une structure LIST/MAP, et il existe **deux conventions réelles selon l'ancienneté du template** : `eventParameters` (clés `name`/`value`) et `eventSettingsTable` (clés `parameter`/`parameterValue`). `flattenGA4EventParams()` aplatit les deux formes ; tous les endroits qui lisaient ces paramètres à plat (ParamMatrixTab, Recommandations, export PDF) ont été corrigés. Alias `event_name`/`eventName` généralisé partout où il manquait.
+
+**Distribution — fiabilisation de bout en bout**
+
+- Résolution de variable Constante pour afficher l'ID réel (pixel/conversion) plutôt que le nom de la variable
+- Fallback `gtag_config` (ressource API séparée) quand un tag GA4 Config n'a pas d'ID propre (mode auto-détection "Google tag lié") — ne fonctionne que si ce Google tag vit dans le même container scanné, pas s'il est dans un container séparé (limite connue, pas de solution retenue pour l'instant)
+- Recherche générique par nom de clé de paramètre (`findIdLikeParamValue`) pour les tags sans code (templates et types natifs courts comme `sp`/`baut`) dont l'ID est dans un champ dédié
+- Normalisation des ID Google Ads (`1059038729` vs `AW-1059038729` → même destination) et dédoublonnage par valeur résolue plutôt que par nom de variable
+- Regroupement : plateformes à instance unique par page (Meta/TikTok/Pinterest/Snapchat/LinkedIn/Microsoft Ads/Clarity) fusionnées en un seul nœud même si certains tags n'ont pas leur propre ID ; Conversion Linker et GA4 Config sans ID repliés dans le vrai nœud de la même plateforme au lieu de former une branche "non détectée" isolée
+- Tri fixe des nœuds par plateforme (mêmes plateformes groupées, même ordre d'un container à l'autre)
+- Vue plein écran par container (bouton d'agrandissement)
+
+**Logos**
+
+Facebook/Meta Pixel, TikTok, Hotjar, Microsoft Clarity remplacés par les vrais logos (`public/tag-types/`), plus de cercles colorés génériques pour ces plateformes.
+
+**Bugs de fiabilité corrigés**
+
+- Badge "N planifiés" sur les lignes de la matrice Tags : comptait tous les renommages correspondant à la ligne sans filtrer sur le statut, donc des renommages déjà appliqués continuaient d'afficher "planifié" indéfiniment (corrigé à 3 endroits : badge de ligne, cellule, props passées aux drawers)
+- `paused?: boolean` ajouté à `GTMTag` (champ réel de l'API absent du type)
