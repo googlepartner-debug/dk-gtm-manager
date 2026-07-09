@@ -25,12 +25,17 @@ src/
     monitoring-mock.ts  — 5 containers simulés (TK, AF, COR, IBE, SWI) avec écarts intentionnels
   lib/
     auth.ts             — helpers OAuth Google
-    gtm-api.ts          — appels API GTM (requiert accessToken) : tags/triggers/variables/templates/gtag_config/versions
-    gtm-diff.ts         — calcul de diff entre package et état GTM live + diffVersions (version publiée vs version publiée)
+    gtm-api.ts          — appels API GTM (requiert accessToken) : tags/triggers/variables/templates/gtag_config/versions ; sliding-window rate limiter (25 req/60s) + retry 429/503 au chokepoint unique request()
+    gtm-diff.ts         — calcul de diff entre package et état GTM live + diffVersions (version publiée vs version publiée) ; expose existingTriggersByName pour résoudre les firingTriggerId par nom
     gtm-matrix.ts       — détection de plateforme/catégorie partagée (Monitoring, Distribution, export PDF) — voir [[monitoring]]
+    gtm-builtin-variables.ts — détecte les {{Click URL}} etc. référencés par un package et les active avant upsert
+    gtm-errors.ts       — friendlyGtmError() : traduit les erreurs API GTM brutes (401/403/404/429/502/503) en messages actionnables
+    package-validation.ts — détecte les {{variable}} fantômes et valeurs suspectes en dur (ID/domaine) dans un package avant déploiement
     ga4-event-params.ts — flattenGA4EventParams() : aplatit les deux conventions réelles de paramètres GA4 Event (eventParameters / eventSettingsTable)
     export-monitoring.ts — génération du rapport HTML imprimable
     storage.ts          — localStorage pour packages et historique
+  features/
+    datalayer-mapping/  — module DataLayer Mapping (analyse du vrai dataLayer capturé, indépendant de la config GTM déclarée) — voir [[datalayer-mapping]]
   pages/
     Dashboard.tsx      — loader initial, appel fetchAccounts
     ContainersPage.tsx — sélection compte + containers, combobox, tri, bulk rename
@@ -67,4 +72,6 @@ src/
 
 **Détection de types GTM natifs non-évidents** : plusieurs types de tags supposés (`awrk`, `clmb`, `gaawc`) se sont révélés faux sur le compte de test réel — les vrais types (`sp`, `gclidw`, `googtag`) sont acceptés en plus des types supposés partout où c'est pertinent (`gtm-matrix.ts`, `DistributionTab.tsx`, `RecommendationsTab.tsx`). Toujours vérifier une hypothèse de type/paramètre GTM sur des données réellement scannées (log ciblé) avant de coder dessus — la doc publique de l'API GTM est souvent incomplète ou absente sur ces détails.
 
-Voir [[auth-strategy]] pour le plan OAuth. Voir [[deployment-flow]] pour le workflow complet. Voir [[monitoring]] pour la logique de la page Monitoring.
+**Résolution firingTriggerId par nom** : un package référence toujours ses triggers par **nom**, jamais par ID (portabilité entre containers). Avant tout `createTag`/`updateTag`, `deploy()` et `applyContainerQueue` résolvent ces noms vers l'ID réel du container cible via `existingTriggersByName` (calculé dans `computeContainerDiff`) + les triggers upsertés dans la même passe. Ne jamais envoyer un ID de trigger d'un autre container ou un nom brut à l'API GTM.
+
+Voir [[auth-strategy]] pour le plan OAuth. Voir [[deployment-flow]] pour le workflow complet. Voir [[monitoring]] pour la logique de la page Monitoring. Voir [[datalayer-mapping]] pour le nouveau module d'analyse dataLayer.

@@ -426,3 +426,51 @@ Facebook/Meta Pixel, TikTok, Hotjar, Microsoft Clarity remplacés par les vrais 
 
 - Badge "N planifiés" sur les lignes de la matrice Tags : comptait tous les renommages correspondant à la ligne sans filtrer sur le statut, donc des renommages déjà appliqués continuaient d'afficher "planifié" indéfiniment (corrigé à 3 endroits : badge de ligne, cellule, props passées aux drawers)
 - `paused?: boolean` ajouté à `GTMTag` (champ réel de l'API absent du type)
+
+---
+
+## 2026-07-09 (suite) — Durcissement du déploiement, module DataLayer Mapping, polish UX
+
+**Contexte** : revue croisée avec Gemini (via Ron) sur `dk-gtm-manager` et sur une proposition de nouveau module DataLayer Mapping. Plusieurs bugs de fond découverts en creusant les affirmations de Gemini plutôt qu'en les prenant pour acquises — dont un qui touchait le flux de déploiement principal, pas juste une fonctionnalité annexe.
+
+**Bug de fond — résolution `firingTriggerId` absente partout**
+
+Aucune résolution nom→ID de trigger n'existait dans le codebase : un tag avec un déclencheur lié envoyait littéralement le nom du trigger (ou l'ID d'un autre container) à l'API GTM du container cible. Corrigé à la racine :
+- `ContainerDiff` expose désormais `existingTriggersByName` (calculé dans `computeContainerDiff`, `gtm-diff.ts`)
+- `deploy()` (`gtm-store.ts`) résout chaque référence vers l'ID réel du container cible avant l'appel API, triggers upsertés dans la même passe que les tags qui les référencent
+- `diffVersions` (Chantier A, réplication entre containers) normalise aussi les deux versions comparées pour rester cohérent
+
+**Activation automatique des built-in variables**
+
+Nouveau module `gtm-lib/gtm-builtin-variables.ts` : détecte les `{{Click URL}}`, `{{Page Path}}` etc. référencés par un package et les active dans le container cible avant l'upsert (2 nouvelles fonctions API `listEnabledBuiltInVariables`/`enableBuiltInVariables`). Sans ça, un trigger qui référence une variable native jamais activée dans un container déploie silencieusement, sans jamais se déclencher. Appliqué à la fois dans `deploy()` et dans `applyContainerQueue` (ce dernier ne l'avait jamais eu, alors que Monitoring l'utilise déjà en prod).
+
+**Autres corrections de `deploy()`/`applyContainerQueue`**
+
+- Ordre de suppression inversé (tag→variable→trigger) dans `applyDeletions`, symétrique à l'ordre de création
+- `deploy()` réutilise désormais `resolveBlankWorkspace` (comme `applyContainerQueue`) au lieu de toujours créer un nouveau workspace — évite la limite des 3 workspaces GTM
+- Validation de package avant déploiement (`package-validation.ts`) : détecte les `{{variable}}` fantômes (non déclarées dans le package, pas une variable native connue) et les valeurs suspectes en dur (ID numérique, domaine) — le piège "tag Turkish déployé chez Air France pointe encore vers le pixel/domaine de Turkish"
+- Rate limiter et retry 429/503 : déjà présents dans `gtm-api.ts` (sliding-window 25 req/60s + backoff), pas un ajout de cette session — diagnostic initial erroné corrigé après lecture du code
+
+**Messages d'erreur compréhensibles (`src/lib/gtm-errors.ts`)**
+
+Les erreurs API GTM (401/403/404/429/502/503) s'affichaient en JSON brut Google directement dans l'UI. Nouveau helper `friendlyGtmError()` traduit en message actionnable, avec bouton "Se reconnecter" dédié sur 401 (relance le popup OAuth puis retente l'action). Appliqué à 6 points d'affichage : `ContainersPage`, `MonitoringPage`, `VersionDiffFlow`, `DiffView`, `DeployPage`, `CleaningTab`.
+
+**Nouveau module : DataLayer Mapping (`src/features/datalayer-mapping/`)**
+
+Nouvel onglet qui analyse le vrai dataLayer capturé sur un site (pas la config GTM déclarée) — taux de complétion par variable, anomalies de type GA4 (currency non-ISO, value en string), détection de variables sans équivalent GTM. Spec complète dans `PRD_DataLayerMapping.md` (nouveau, à la racine).
+
+- Types (`datalayer.types.ts`), store Zustand persisté par profil (Phase A localStorage, mock data basé sur le cas réel Noviscore)
+- Onglets Events (drill-down variable au clic, KPI en tête — pas d'onglet Dashboard séparé, jugé redondant pour 4 chiffres), Variables, Dictionnaire, Alertes
+- **Bouton "Créer dans GTM"** : nouvelle queue `EntityCreationOperation`/`pendingEntityCreations` dans `gtm-store.ts`, publiée via `applyContainerQueue` (pas via le flux Package — mauvais choix initial corrigé après avoir réalisé qu'il n'y a qu'un seul container cible ici, pas de propagation multi-container à faire)
+- **Plan Kanban par page** (`DatalayerKanbanPage.tsx`) : colonnes = pages/étapes du parcours plutôt qu'events isolés, cascade de classification `pageRouter.ts` (flag sémantique → regex URL → transversal >3 colonnes → bac à sable), Vue Master (agrégée multi-sites, badges de couverture + comparateur de structures) et Vue Partenaire (un site), Focus Mode (funnel e-commerce en surbrillance, ligne de flux qui casse si complétion <95%), tiroir latéral de détail (`EventDetailDrawer`) réutilisant le pattern déjà en place (`EventChainDrawer`/`TagDrawer`)
+- **Collecteur** (`gtm-tag/dl-mapping-collector.html`) : tag GTM Custom HTML (pas Custom Template Sandboxed JS — le sandbox ne peut structurellement pas intercepter `dataLayer.push()` de façon vivante, erreur de conception dans la proposition initiale de Gemini). Override non-destructif de `.push`, anonymisation client-side avant tout envoi réseau, buffer+flush groupé (jamais un ping HTTP par event)
+- Bookmarklet envisagé puis abandonné, remplacé par ce collecteur temps réel
+- Schéma Supabase (Phase B, pas encore implémenté) revu deux fois : d'abord "pas d'historique brut" jugé insuffisant pour l'alerting (aucune notion temporelle), puis le calcul de volumétrie avec un vrai chiffre terrain (TK/PFS : 400K events GA4/jour) a invalidé l'hypothèse de conservation exhaustive du brut — direction retenue : rollup quotidien conservé indéfiniment (petit, indépendant du trafic) + échantillon plafonné par (site, event, jour) pour le brut plutôt qu'une fenêtre de rétention sur le trafic exhaustif
+
+**Polish UX transverse**
+
+- Case entière cliquable (pas juste le texte) sur les cellules event/trigger d'`EventsPage`
+- `InfoTooltip` (nouveau composant partagé) : icône "i" compacte, popover au clic — ajoutée sur les 9 pages principales pour expliquer le rôle de chaque écran sans occuper d'espace permanent
+- Uniformisation du pattern "Absente/Créer" (pilule rouge, icône ✕→+ au survol, repris de Monitoring) sur les matrices variables d'`EventsPage` et de DataLayer Mapping
+- Modale de duplication (`QuickCreatePanel`, Monitoring) élargie 400px→480px
+- Audit et correction des effets de hover manquants ou trop subtils (`hover:opacity-70` remplacé par de vrais changements de fond) sur une dizaine de boutons à travers l'app ; contrastes vérifiés au passage, pas de vrai risque blanc-sur-blanc trouvé malgré l'inquiétude initiale

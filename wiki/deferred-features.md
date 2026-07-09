@@ -27,6 +27,12 @@
 **État** : pas encore implémenté. OAuth n'est plus le blocage (API GTM live disponible) — reste à construire l'UI et le flow de rollback.
 **Défini dans** : PRD v1.4.
 
+## DataLayer Mapping — Phase B (collecteur → Supabase)
+
+**Description** : le tag collecteur (`gtm-tag/dl-mapping-collector.html`) est écrit mais pas encore déployé ; le schéma Supabase (5 tables, voir [[datalayer-mapping]] et `PRD_DataLayerMapping.md` §9) est conçu mais pas encore créé.
+**État** : pas encore implémenté. Phase A (localStorage, mock data) fonctionne indépendamment et ne bloque pas dessus.
+**Note** : le bookmarklet envisagé initialement pour cette phase a été abandonné au profit du collecteur temps réel.
+
 ## Workspace-level last-modified
 
 **Description** : afficher la vraie date de dernière modification (niveau workspace) plutôt que la date de dernière publication (fingerprint container). Nécessite `workspaces.list` par container.

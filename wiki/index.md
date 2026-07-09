@@ -11,5 +11,6 @@
 | [[deferred-features]] | Ce qui reste à construire : rollback button, workspace last-modified, usage tracking |
 | [[profiles]] | Système de profils multi-consultants, namespace localStorage, page /profile |
 | [[events-page]] | Dashboard drill-down EventsPage — score par event/trigger/variable, queue d'actions |
+| [[datalayer-mapping]] | Module DataLayer Mapping — analyse du vrai dataLayer capturé, Kanban par page, collecteur GTM |
 
-_Mis à jour : 2026-07-06_
+_Mis à jour : 2026-07-09_
