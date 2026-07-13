@@ -106,6 +106,16 @@ const nav = [
     label: 'Plan Kanban',
     to: '/dashboard/datalayer-kanban',
   },
+  {
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <path d="M4 2h6l3 3v9H4V2z" stroke="currentColor" strokeWidth="1.25" strokeLinejoin="round" fill="none" opacity="0.7"/>
+        <path d="M6 7h4M6 9.5h4M6 12h2.5" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round"/>
+      </svg>
+    ),
+    label: 'Plan de tracking',
+    to: '/dashboard/tracking-plan',
+  },
 ];
 
 export function Sidebar() {

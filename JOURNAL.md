@@ -546,3 +546,26 @@ Ron a reçu le pitch de deux outils comparables et a demandé d'en extraire ce q
 **Discussion non actée : accès BigQuery pour les clients sans compte GCP**
 
 Ron s'interroge sur un moyen simple de lier BigQuery aux propriétés GA4 clients (la plupart n'ont pas de compte GCP et se perdraient dans la Google Cloud Console) et sur le coût réel de BigQuery. Recherché et confirmé : l'export GA4→BigQuery est gratuit, BigQuery a un vrai palier gratuit (1 To requêtes/mois, 10 Go stockage/mois), mais un compte de facturation (CB) doit être attaché au projet GCP pour éviter le mode Sandbox (expiration des tables à 60 jours, inutilisable pour une baseline glissante). Piste proposée : DK possède le(s) projet(s) GCP avec sa propre facturation, ne demande que le rôle Editor sur la propriété GA4 du client (même niveau d'accès que ce qui est déjà demandé pour GTM) et fait le lien depuis son propre compte — le client ne touche jamais à Google Cloud Console. Pas encore documenté dans un PRD, discussion à trancher.
+
+---
+
+## 2026-07-13 (suite) — Module Plan de tracking (v1)
+
+Ron a validé le PRD (`PRD_TrackingPlan.md`) et demandé l'implémentation, avec en plus : suppression (individuelle + multiple), sélection "tout sélectionner", et génération automatique d'un snippet `dataLayer.push()`.
+
+**Nouveau module `src/features/tracking-plan/`**
+
+- Types (`trackingPlan.types.ts`) : `TrackingPlan`/`TrackingPlanEvent`/`TrackingPlanParameter`, statut `EventStatus` jamais persisté
+- Store (`trackingPlanStore.ts`) : un plan par `clientId` (même référentiel que `datalayerStore`), persisté par profil (`dk_tracking_plan_v1_${profileId}`), CRUD events/paramètres + `removeEvents` (suppression groupée, une seule persistance au lieu de N)
+- Page (`TrackingPlanPage.tsx`) : sélecteur client, "Nouveau plan" (feuille vierge), toggle Vue Business (cartes) / Vue Dev (table dense), drawer d'ajout/édition, panneau de détail à 3 colonnes
+- Statut **Planifié → Implémenté → Vérifié** calculé à la volée (jamais stocké) en croisant `useGTMStore().monitoringData` (via `computeEventChain`, réutilisé tel quel depuis `lib/event-chain.ts` — pas de nouvelle logique de matching) pour "Implémenté", et `useDatalayerStore().getEventCoverage()` pour "Vérifié"
+- Suppression : individuelle et groupée, `window.confirm()` dans les deux cas (même convention que `PackagesPage`), sélection réinitialisée au changement de client
+- **Générateur `dataLayer.push()`** (`utils/generatePush.ts`) : construit un objet imbriqué à partir des clés pointées des paramètres (notation wildcard `items[*].key` déjà utilisée ailleurs dans l'app), valeur d'exemple si renseignée (typée selon `param.type`), sinon placeholder `{{nom}}` — même convention que `templateToImplement` de DataLayer Mapping. Bouton Copier dans le panneau de détail.
+
+**Bug corrigé en testant (pas en relisant le code)** : `loadMockData()` du store DataLayer Mapping ne persistait jamais son résultat — une course avec le chargement de profil au niveau `App.tsx` écrasait systématiquement les données mock sur un profil neuf (un utilisateur fraîchement connecté n'aurait jamais vu aucune donnée). `loadMockData()` appelle désormais `persist()` comme toutes les autres actions du store.
+
+**Bug corrigé en testant (staleness du drawer)** : le drawer d'édition recevait un instantané figé de l'event (`TrackingPlanEvent | null` en state) au lieu de le relire en direct — ajouter un paramètre ne se reflétait pas dans le drawer ouvert. Remplacé par un state d'ID (`editingEventId`/`detailEventId`) qui re-dérive l'event live depuis le store à chaque rendu.
+
+**`InfoTooltip` étendu** : nouveau prop `label` (défaut : le texte page-level existant) pour permettre la réutilisation inline à côté d'un champ de formulaire ("Data owner") sans afficher le texte "À quoi sert cette page ?" hors contexte — repéré en testant, pas en relisant le code.
+
+**Validé de bout en bout via Playwright** (pas juste `tsc`/lint) : création de plan, ajout d'event, statut "Vérifié" calculé correctement sur les données mock Noviscore, sélection groupée + suppression avec confirmation, génération de push avec cas complexe (wildcard tableau + valeur numérique + placeholder mixte dans le même event).

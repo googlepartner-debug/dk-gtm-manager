@@ -12,10 +12,12 @@ import { HistoryPage } from './pages/HistoryPage';
 import { ContextePage } from './pages/ContextePage';
 import { DataLayerMappingPage } from './features/datalayer-mapping/pages/DataLayerMappingPage';
 import { DatalayerKanbanPage } from './features/datalayer-mapping/pages/DatalayerKanbanPage';
+import { TrackingPlanPage } from './features/tracking-plan/pages/TrackingPlanPage';
 import { useAuthStore } from './store/auth-store';
 import { useProfileStore } from './store/profile-store';
 import { useGTMStore } from './store/gtm-store';
 import { useDatalayerStore } from './features/datalayer-mapping/stores/datalayerStore';
+import { useTrackingPlanStore } from './features/tracking-plan/stores/trackingPlanStore';
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { accessToken } = useAuthStore();
@@ -36,6 +38,7 @@ export default function App() {
   const { activeProfileId } = useProfileStore();
   const { loadForProfile, activeProfileId: gtmProfileId } = useGTMStore();
   const { loadForProfile: loadDatalayerForProfile, activeProfileId: datalayerProfileId } = useDatalayerStore();
+  const { loadForProfile: loadTrackingPlanForProfile, activeProfileId: trackingPlanProfileId } = useTrackingPlanStore();
 
   // On app start, restore the active profile's data into the GTM store
   useEffect(() => {
@@ -44,6 +47,9 @@ export default function App() {
     }
     if (accessToken && activeProfileId && activeProfileId !== datalayerProfileId) {
       loadDatalayerForProfile(activeProfileId);
+    }
+    if (accessToken && activeProfileId && activeProfileId !== trackingPlanProfileId) {
+      loadTrackingPlanForProfile(activeProfileId);
     }
   }, [accessToken, activeProfileId]);
 
@@ -67,6 +73,7 @@ export default function App() {
           <Route path="contexte" element={<ContextePage />} />
           <Route path="datalayer-mapping" element={<DataLayerMappingPage />} />
           <Route path="datalayer-kanban" element={<DatalayerKanbanPage />} />
+          <Route path="tracking-plan" element={<TrackingPlanPage />} />
         </Route>
       </Routes>
     </BrowserRouter>

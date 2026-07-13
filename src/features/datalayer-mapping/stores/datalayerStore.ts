@@ -115,6 +115,12 @@ export const useDatalayerStore = create<DatalayerState>((set, get) => ({
       activeClientId: MOCK_CLIENTS[0]?.clientId ?? null,
       activeSiteId: MOCK_CLIENTS[0]?.sites[0]?.siteId ?? null,
     });
+    // Without this, App.tsx's own profile-load effect (loadForProfile) can fire after this
+    // one and overwrite these in-memory-only clients with the (empty) persisted state —
+    // a race that stayed invisible as long as some other action had already persisted
+    // real data for the profile, but leaves a brand new profile stuck on an empty client
+    // list forever, since nothing re-triggers loadMockData once clients.length > 0.
+    persist(get().activeProfileId, { clients: get().clients, events: get().events, variables: get().variables, dictionary: get().dictionary, occurrences: get().occurrences, focusEvents: get().focusEvents });
   },
 
   setActiveClient: (clientId) => set({ activeClientId: clientId, activeSiteId: null }),
