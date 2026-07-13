@@ -479,7 +479,7 @@ function EventDetailPanel({
 
 export function TrackingPlanPage() {
   const { clients, activeClientId, setActiveClient } = useDatalayerStore();
-  const { getPlan, createPlan, removeEvent, removeEvents } = useTrackingPlanStore();
+  const { getPlan, createPlan, loadMockPlan, removeEvent, removeEvents } = useTrackingPlanStore();
 
   const [viewMode, setViewMode] = useState<ViewMode>('business');
   // IDs, not object snapshots — the drawer/panel always re-derive the live event from the
@@ -574,9 +574,16 @@ export function TrackingPlanPage() {
       </div>
 
       {!plan ? (
-        <div className="bg-card border border-dashed border-border rounded-xl p-12 text-center">
-          <p className="text-sm text-muted-fg mb-4">Aucun plan de tracking pour {activeClient?.clientName}.</p>
-          <Button onClick={() => { createPlan(activeClientId); }}>Nouveau plan</Button>
+        <div className="bg-card border border-dashed border-border rounded-xl p-12 text-center space-y-2">
+          <p className="text-sm text-muted-fg mb-2">Aucun plan de tracking pour {activeClient?.clientName}.</p>
+          <div className="flex items-center justify-center gap-2">
+            <Button onClick={() => { createPlan(activeClientId); }}>Nouveau plan</Button>
+            {activeClientId === 'noviscore' && (
+              <Button variant="secondary" onClick={() => { loadMockPlan(activeClientId); }}>
+                Charger un plan de démo
+              </Button>
+            )}
+          </div>
         </div>
       ) : (
         <>

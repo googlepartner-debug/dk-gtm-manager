@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { TrackingPlan, TrackingPlanEvent, TrackingPlanParameter, TrackingPlanScreenshot } from '../types/trackingPlan.types';
+import { MOCK_TRACKING_PLAN } from '../../../data/tracking-plan-mock';
 
 function tryParse<T>(raw: string | null, fallback: T): T {
   if (!raw) return fallback;
@@ -24,6 +25,8 @@ interface TrackingPlanState {
 
   getPlan: (clientId: string) => TrackingPlan | null;
   createPlan: (clientId: string) => void;
+  // Démo pour itérer sur l'UI/UX en attendant Supabase (2026-07-14) — voir data/tracking-plan-mock.ts
+  loadMockPlan: (clientId: string) => void;
 
   addEvent: (clientId: string, event: Omit<TrackingPlanEvent, 'id' | 'parameters' | 'screenshots'>) => string;
   updateEvent: (clientId: string, eventId: string, updates: Partial<Omit<TrackingPlanEvent, 'id' | 'parameters' | 'screenshots'>>) => void;
@@ -59,6 +62,12 @@ export const useTrackingPlanStore = create<TrackingPlanState>((set, get) => ({
   createPlan: (clientId) => {
     if (get().plans[clientId]) return; // already exists — don't overwrite a blank slate over real data
     set((state) => ({ plans: { ...state.plans, [clientId]: { clientId, createdAt: new Date().toISOString(), events: [] } } }));
+    persist(get().activeProfileId, get().plans);
+  },
+
+  loadMockPlan: (clientId) => {
+    if (get().plans[clientId]) return; // never overwrite an existing (possibly real) plan
+    set((state) => ({ plans: { ...state.plans, [clientId]: { ...MOCK_TRACKING_PLAN, clientId } } }));
     persist(get().activeProfileId, get().plans);
   },
 
