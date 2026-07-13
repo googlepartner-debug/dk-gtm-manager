@@ -5,7 +5,7 @@ Stack : React + Vite + TypeScript + Tailwind v4 + Zustand. Projet perso, dissoci
 
 ## Contexte rapide
 
-- **GCP OAuth opérationnel depuis le 2026-07-02** (projet GCP `gtm-wbncv54-ngq1n`, `.env.local` avec `VITE_GOOGLE_CLIENT_ID`) — login Google fonctionnel, guards `RequireAuth` sur `/dashboard/*`. `gtm-static.ts` reste le fallback quand pas de token — ne pas casser ce pattern
+- **GCP OAuth opérationnel depuis le 2026-07-02** (projet GCP `gtm-wbncv54-ngq1n`, `.env.local` avec `VITE_GOOGLE_CLIENT_ID`) — login Google fonctionnel, guards `RequireAuth` sur `/dashboard/*`. `gtm-static.ts` reste le fallback quand pas de token — ne pas casser ce pattern. **Constat du 2026-07-14 (audit UX Containers)** : ce fallback est aujourd'hui inatteignable en pratique, `RequireAuth` bloquant tout `/dashboard/*` tant que `accessToken` est vide — donc dès qu'on voit une page du dashboard, `fetchAccounts`/`selectAccount` reçoivent toujours un vrai token. Gardé tel quel en attendant une décision produit (ouvrir un vrai mode démo sans connexion, ou assumer que c'est un vestige pré-OAuth à documenter comme tel)
 - **Profils multi-consultants** (`useProfileStore`) : le compte Google `googlepartner@digitalkeys.fr` est partagé entre consultants DK — chaque profil a son propre namespace localStorage (`dk_gtm_monitoring_v1_${profileId}`). Toujours passer par le profil actif, jamais écrire en dur dans `localStorage`
 - **Store pattern** : `fetchAccounts(token?: string)` — si pas de token → fallback statique
 - **Tailwind v4** : config dans `src/index.css` via `@theme`, pas de `tailwind.config.ts`

@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/auth-store';
 import { useGTMStore } from '../store/gtm-store';
 import { Badge } from '../components/ui/Badge';
@@ -18,15 +17,15 @@ function formatPublicationDate(iso: string): string {
 export function ContainersPage() {
   const { accessToken, login, isLoading: isLoggingIn } = useAuthStore();
   const {
-    accounts, selectedAccountId, selectAccount, fetchAccounts,
+    accounts, selectedAccountId, recentAccountName, selectAccount, fetchAccounts,
     containers, selectedContainerIds, toggleContainer, selectAllContainers, clearContainerSelection,
     isLoadingAccounts, isLoadingContainers, accountError,
     pendingContainerRenames, removeContainerRename, clearContainerRenames,
     applyContainerRenames, isApplyingContainerRenames,
   } = useGTMStore();
 
-  const navigate = useNavigate();
   const [sortMode, setSortMode] = useState<SortMode>('api');
+  const [containerFilter, setContainerFilter] = useState('');
   const [loadingMsgIdx, setLoadingMsgIdx] = useState(0);
   const [renameModalOpen, setRenameModalOpen] = useState(false);
   const [renameErrorNotif, setRenameErrorNotif] = useState<string | null>(null);
@@ -66,9 +65,16 @@ export function ContainersPage() {
       })
     : containers;
 
+  const filter = containerFilter.trim().toLowerCase();
+  const visibleContainers = filter
+    ? sortedContainers.filter((c) => c.name.toLowerCase().includes(filter) || c.publicId.toLowerCase().includes(filter))
+    : sortedContainers;
+
   useEffect(() => {
     fetchAccounts(accessToken ?? undefined);
   }, [accessToken]);
+
+  useEffect(() => { setContainerFilter(''); }, [selectedAccountId]);
 
   // Auto-restore last account: if we have a selectedAccountId from a previous session
   // but no containers loaded yet, trigger the fetch automatically
@@ -99,55 +105,71 @@ export function ContainersPage() {
           <p className="text-sm text-muted-fg mt-1">Sélectionnez les containers cibles pour vos déploiements.</p>
         </div>
         {selectedCount > 0 && (
-          <div className="flex items-center gap-3 shrink-0">
-            <span className="text-sm text-primary font-semibold">
-              {selectedCount} container{selectedCount > 1 ? 's' : ''} sélectionné{selectedCount > 1 ? 's' : ''}
-            </span>
-            <Button size="sm" onClick={() => navigate('/dashboard/deploy')}>
-              Aller au déploiement →
-            </Button>
-          </div>
+          <span className="text-sm text-primary font-semibold shrink-0">
+            {selectedCount} container{selectedCount > 1 ? 's' : ''} sélectionné{selectedCount > 1 ? 's' : ''}
+          </span>
         )}
       </div>
 
       {/* Account selector */}
-      <div className="bg-card border border-border rounded-xl p-4 mb-4">
-        <label className="block text-xs font-semibold text-muted-fg uppercase tracking-wide mb-2">
-          Compte GTM
-        </label>
-        {isLoadingAccounts ? (
-          <div className="h-9 bg-muted animate-pulse rounded-lg" />
-        ) : accountError ? (() => {
-          const friendly = friendlyGtmError(accountError);
-          const retry = () => {
-            if (selectedAccountId) selectAccount(selectedAccountId, accessToken ?? undefined);
-            else fetchAccounts(accessToken ?? undefined);
-          };
-          return (
+      {accountError && friendlyGtmError(accountError)?.isAuthError ? (
+        // Pleine largeur plutôt qu'un petit encart perdu en haut d'une page vide — la session
+        // expirée est l'état le plus fréquent (token Google ~1h), mérite mieux qu'une bannière.
+        <div className="bg-card border border-border rounded-xl p-10 flex flex-col items-center text-center gap-3 mb-4">
+          <div className="w-11 h-11 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: 'hsl(0 84% 96%)' }}>
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+              <rect x="4" y="9" width="12" height="8" rx="1.5" stroke="hsl(0 84% 55%)" strokeWidth="1.5"/>
+              <path d="M6.5 9V6.5a3.5 3.5 0 017 0V9" stroke="hsl(0 84% 55%)" strokeWidth="1.5" strokeLinecap="round"/>
+            </svg>
+          </div>
+          <div>
+            <h2 className="text-sm font-semibold text-foreground">Ta session Google a expiré</h2>
+            <p className="text-sm text-muted-fg mt-1 max-w-sm">
+              {recentAccountName
+                ? <>Reconnecte-toi pour retrouver <span className="font-medium text-foreground">{recentAccountName}</span> — ta sélection de containers est conservée.</>
+                : <>Reconnecte-toi pour continuer — ta sélection de containers est conservée.</>}
+            </p>
+          </div>
+          <Button
+            size="sm"
+            loading={isLoggingIn}
+            onClick={async () => {
+              try {
+                await login();
+                if (selectedAccountId) selectAccount(selectedAccountId, accessToken ?? undefined);
+                else fetchAccounts(accessToken ?? undefined);
+              } catch { /* user cancelled or Google error — already surfaced via auth-store's own error state */ }
+            }}
+          >
+            Se reconnecter
+          </Button>
+        </div>
+      ) : (
+        <div className="bg-card border border-border rounded-xl p-4 mb-4">
+          <label className="block text-xs font-semibold text-muted-fg uppercase tracking-wide mb-2">
+            Compte GTM
+          </label>
+          {isLoadingAccounts ? (
+            <div className="h-9 bg-muted animate-pulse rounded-lg" />
+          ) : accountError ? (
             <div className="space-y-2">
               <div className="text-sm text-destructive bg-destructive/10 border border-destructive/20 px-3 py-2 rounded-lg">
-                {friendly?.message}
+                {friendlyGtmError(accountError)?.message}
               </div>
-              {friendly?.isAuthError ? (
-                <Button size="sm" variant="secondary" loading={isLoggingIn} onClick={async () => { try { await login(); retry(); } catch { /* user cancelled or Google error — already surfaced via auth-store's own error state */ } }}>
-                  Se reconnecter
-                </Button>
-              ) : (
-                <Button size="sm" variant="secondary" onClick={retry}>
-                  Réessayer
-                </Button>
-              )}
+              <Button size="sm" variant="secondary" onClick={() => (selectedAccountId ? selectAccount(selectedAccountId, accessToken ?? undefined) : fetchAccounts(accessToken ?? undefined))}>
+                Réessayer
+              </Button>
             </div>
-          );
-        })() : (
-          <Combobox
-            options={accounts.map((a) => ({ value: a.accountId, label: a.name }))}
-            value={selectedAccountId ?? ''}
-            onChange={(val) => selectAccount(val, accessToken ?? undefined)}
-            placeholder="Rechercher un compte…"
-          />
-        )}
-      </div>
+          ) : (
+            <Combobox
+              options={accounts.map((a) => ({ value: a.accountId, label: a.name }))}
+              value={selectedAccountId ?? ''}
+              onChange={(val) => selectAccount(val, accessToken ?? undefined)}
+              placeholder="Rechercher un compte…"
+            />
+          )}
+        </div>
+      )}
 
       {/* Containers list */}
       {selectedAccountId && (
@@ -204,6 +226,29 @@ export function ContainersPage() {
             </div>
           </div>
 
+          {!isLoadingContainers && containers.length > 5 && (
+            <div className="px-4 py-2.5 border-b border-border">
+              <div className="relative">
+                <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-fg" width="13" height="13" viewBox="0 0 13 13" fill="none">
+                  <circle cx="5.5" cy="5.5" r="4" stroke="currentColor" strokeWidth="1.3" />
+                  <path d="M8.5 8.5L11 11" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+                </svg>
+                <input
+                  type="text"
+                  value={containerFilter}
+                  onChange={(e) => setContainerFilter(e.target.value)}
+                  placeholder="Rechercher un container par nom ou ID public…"
+                  className="w-full h-8 pl-8 pr-3 text-sm border border-border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+              </div>
+              {filter && (
+                <p className="text-xs text-muted-fg mt-1.5">
+                  {visibleContainers.length} résultat{visibleContainers.length !== 1 ? 's' : ''} sur {containers.length}
+                </p>
+              )}
+            </div>
+          )}
+
           {isLoadingContainers ? (
             <div>
               {/* Message de chargement */}
@@ -241,9 +286,13 @@ export function ContainersPage() {
             <div className="text-center py-12 text-muted-fg text-sm">
               Aucun container dans ce compte.
             </div>
+          ) : visibleContainers.length === 0 ? (
+            <div className="text-center py-12 text-muted-fg text-sm">
+              Aucun container ne correspond à « {containerFilter} ».
+            </div>
           ) : (
             <ul className="divide-y divide-border">
-              {sortedContainers.map((c) => {
+              {visibleContainers.map((c) => {
                 const isSelected = selectedContainerIds.has(c.containerId);
                 return (
                   <li
@@ -284,18 +333,6 @@ export function ContainersPage() {
               })}
             </ul>
           )}
-        </div>
-      )}
-
-      {/* CTA */}
-      {selectedCount > 0 && (
-        <div className="mt-4 p-4 bg-primary/8 border border-primary/20 rounded-xl flex items-center justify-between">
-          <span className="text-sm text-primary font-semibold">
-            {selectedCount} container{selectedCount > 1 ? 's' : ''} sélectionné{selectedCount > 1 ? 's' : ''} — prêt à déployer
-          </span>
-          <Button size="sm" onClick={() => navigate('/dashboard/deploy')}>
-            Aller au déploiement →
-          </Button>
         </div>
       )}
 

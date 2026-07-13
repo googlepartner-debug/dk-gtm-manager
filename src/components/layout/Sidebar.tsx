@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { clsx } from 'clsx';
 import { FeedbackDrawer } from '../ui/FeedbackDrawer';
-import { useGTMStore } from '../../store/gtm-store';
 
 const nav = [
   {
@@ -109,45 +108,34 @@ const nav = [
 
 export function Sidebar() {
   const [feedbackOpen, setFeedbackOpen] = useState(false);
-  const selectedCount = useGTMStore((s) => s.selectedContainerIds.size);
 
   return (
     <aside className="w-52 shrink-0 flex flex-col border-r border-sidebar-border bg-sidebar-bg">
       {/* Nav */}
       <nav className="flex-1 px-3 py-3 space-y-0.5">
-        {nav.map((item) => {
-          const isDeploy = item.to === '/dashboard/deploy';
-          return (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              className={({ isActive }) =>
-                clsx(
-                  'flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150',
-                  isActive
-                    ? 'bg-card text-foreground shadow-card border border-border'
-                    : 'text-muted-fg hover:bg-card hover:text-foreground'
-                )
-              }
-              style={({ isActive }) =>
+        {nav.map((item) => (
+          <NavLink
+            key={item.to}
+            to={item.to}
+            className={({ isActive }) =>
+              clsx(
+                'flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150',
                 isActive
-                  ? { borderLeftWidth: '3px', borderLeftColor: 'hsl(46 100% 50%)', paddingLeft: 'calc(0.75rem - 3px + 2px)' }
-                  : { borderLeftWidth: '3px', borderLeftColor: 'transparent' }
-              }
-              // Note: borderLeftColor uses exact token color (accent) but requires inline style for left-side specificity
-            >
-              {item.icon}
-              <span className="flex-1">{item.label}</span>
-              {isDeploy && selectedCount > 0 && (
-                <span
-                  className="text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none bg-primary text-white"
-                >
-                  {selectedCount}
-                </span>
-              )}
-            </NavLink>
-          );
-        })}
+                  ? 'bg-card text-foreground shadow-card border border-border'
+                  : 'text-muted-fg hover:bg-card hover:text-foreground'
+              )
+            }
+            style={({ isActive }) =>
+              isActive
+                ? { borderLeftWidth: '3px', borderLeftColor: 'hsl(46 100% 50%)', paddingLeft: 'calc(0.75rem - 3px + 2px)' }
+                : { borderLeftWidth: '3px', borderLeftColor: 'transparent' }
+            }
+            // Note: borderLeftColor uses exact token color (accent) but requires inline style for left-side specificity
+          >
+            {item.icon}
+            <span className="flex-1">{item.label}</span>
+          </NavLink>
+        ))}
       </nav>
 
       {/* Footer */}

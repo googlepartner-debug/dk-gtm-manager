@@ -7,8 +7,9 @@ import { DKGTMLogo } from '../ui/DKGTMLogo';
 
 export function Header() {
   const { userEmail, userName, userPicture, logout } = useAuthStore();
-  const { selectedAccountId, accounts } = useGTMStore();
+  const { selectedAccountId, accounts, selectedContainerIds } = useGTMStore();
   const { profiles, activeProfileId } = useProfileStore();
+  const selectedCount = selectedContainerIds.size;
   const navigate = useNavigate();
   const account = accounts.find((a) => a.accountId === selectedAccountId);
   const activeProfile = profiles.find((p) => p.id === activeProfileId);
@@ -50,6 +51,24 @@ export function Header() {
           </span>
         </button>
       )}
+
+      {/* CTA "Publier" — en haut à droite du header global, comme le bouton Submit de GTM,
+          plutôt qu'un badge dans le menu de gauche ou un bouton dupliqué dans le contenu de
+          ContainersPage (retour utilisateur 2026-07-14). Visible dès qu'une sélection de
+          containers existe, peu importe la page consultée. */}
+      {selectedCount > 0 && (
+        <Button size="sm" onClick={() => navigate('/dashboard/deploy')}>
+          Publier
+          <span className="ml-1.5 inline-flex items-center justify-center w-4 h-4 rounded-full text-[10px] font-bold bg-white/20">
+            {selectedCount}
+          </span>
+        </Button>
+      )}
+
+      {/* Séparateur — l'espace de travail DK (pill ci-dessus) et le compte Google (ci-dessous)
+          sont deux notions distinctes (un compte Google partagé entre plusieurs consultants
+          DK, cf. CLAUDE.md) qui se ressemblaient trop visuellement sans cette coupure. */}
+      {activeProfile && <div className="w-px h-6 bg-border" />}
 
       {/* User */}
       <div className="flex items-center gap-3">

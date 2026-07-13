@@ -52,6 +52,7 @@ const RECENT_KEY = 'dk_gtm_recent';
 
 interface RecentSession {
   accountId: string;
+  accountName?: string; // absent on older persisted sessions, pre-2026-07-14
   containerIds: string[];
 }
 
@@ -64,8 +65,10 @@ function loadRecent(): RecentSession | null {
   }
 }
 
-function saveRecent(accountId: string, containerIds: string[]) {
-  localStorage.setItem(RECENT_KEY, JSON.stringify({ accountId, containerIds }));
+// accountName kept alongside the id purely for UX — showing "tu retrouveras [Nom]" on the
+// session-expired screen (ContainersPage) without needing a successful accounts fetch first.
+function saveRecent(accountId: string, containerIds: string[], accountName?: string) {
+  localStorage.setItem(RECENT_KEY, JSON.stringify({ accountId, accountName, containerIds }));
 }
 
 const _recent = loadRecent();
@@ -107,6 +110,9 @@ interface GTMStore {
   // Accounts & containers
   accounts: GTMAccount[];
   selectedAccountId: string | null;
+  // Nom du dernier compte sélectionné, persisté séparément — permet d'afficher "tu
+  // retrouveras [Nom]" sur l'écran de session expirée avant même que /accounts ait réussi.
+  recentAccountName: string | null;
   containers: GTMContainer[];
   selectedContainerIds: Set<string>;
   isLoadingAccounts: boolean;
@@ -352,6 +358,7 @@ async function resolveBlankWorkspace(
 export const useGTMStore = create<GTMStore>((set, get) => ({
   accounts: [],
   selectedAccountId: _recent?.accountId ?? null,
+  recentAccountName: _recent?.accountName ?? null,
   containers: [],
   selectedContainerIds: new Set(_recent?.containerIds ?? []),
   isLoadingAccounts: false,
@@ -420,15 +427,17 @@ export const useGTMStore = create<GTMStore>((set, get) => ({
 
   selectAccount: async (accountId, token) => {
     const isRestoringCurrentAccount = accountId === get().selectedAccountId;
+    const accountName = get().accounts.find((a) => a.accountId === accountId)?.name ?? get().recentAccountName;
     set({
       selectedAccountId: accountId,
+      recentAccountName: accountName ?? null,
       isLoadingContainers: true,
       containers: [],
       // Keep existing selection when restoring the same account (session restore)
       selectedContainerIds: isRestoringCurrentAccount ? get().selectedContainerIds : new Set(),
       diffs: {},
     });
-    saveRecent(accountId, [...(isRestoringCurrentAccount ? get().selectedContainerIds : new Set<string>())]);
+    saveRecent(accountId, [...(isRestoringCurrentAccount ? get().selectedContainerIds : new Set<string>())], accountName ?? undefined);
     if (!token) {
       const containers = STATIC_CONTAINERS[accountId] ?? [];
       set({ containers, isLoadingContainers: false });
@@ -480,20 +489,20 @@ export const useGTMStore = create<GTMStore>((set, get) => ({
     else ids.add(containerId);
     set({ selectedContainerIds: ids, diffs: {} });
     const accountId = get().selectedAccountId;
-    if (accountId) saveRecent(accountId, [...ids]);
+    if (accountId) saveRecent(accountId, [...ids], get().recentAccountName ?? undefined);
   },
 
   selectAllContainers: () => {
     const ids = new Set(get().containers.map((c) => c.containerId));
     set({ selectedContainerIds: ids, diffs: {} });
     const accountId = get().selectedAccountId;
-    if (accountId) saveRecent(accountId, [...ids]);
+    if (accountId) saveRecent(accountId, [...ids], get().recentAccountName ?? undefined);
   },
 
   clearContainerSelection: () => {
     set({ selectedContainerIds: new Set(), diffs: {} });
     const accountId = get().selectedAccountId;
-    if (accountId) saveRecent(accountId, []);
+    if (accountId) saveRecent(accountId, [], get().recentAccountName ?? undefined);
   },
 
   // ─── Packages ───────────────────────────────────────────────────────────────
