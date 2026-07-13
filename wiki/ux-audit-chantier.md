@@ -16,6 +16,15 @@ Points traités (Ron a choisi "tout") :
 
 **Entrée "Déployer" retirée de la sidebar** — dernier ajustement demandé par Ron : maintenant que "Publier" vit dans le header global, l'entrée `/dashboard/deploy` dans le menu de gauche faisait doublon. Retirée du tableau `nav` de `Sidebar.tsx`. La route `/dashboard/deploy` (`App.tsx`) reste intacte — seul point d'entrée restant : le CTA "Publier" du header.
 
-## Packages, Déployer, Monitoring, DataLayer Mapping, Plan de tracking — à venir
+## Packages — fait (2026-07-14)
+
+Trois bugs réels trouvés (pas des choix de design — corrigés directement) :
+- **Badge client vide/cassé** — le template "GA4 Ecommerce Standard" a `client: ''` dans `package-templates.ts`, ce qui affichait un badge violet vide dans la liste. `PackagesPage.tsx` cache maintenant le badge quand `pkg.client` est vide (protège aussi tout futur template dans le même cas).
+- **Chemin de fichier qui fuitait dans une description utilisateur** — la carte du template "DataLayer Mapping — Collecteur" affichait littéralement un chemin de code (`src/features/datalayer-mapping/gtm-tag/dl-mapping-sheets-endpoint.gs.js`) dans le texte du picker. Raccourci, renvoie vers le PRD.
+- **"+ Nouveau package" créait un package fantôme** — `openNew()` appelait `upsertPackage()` avant même que l'utilisateur ait rien saisi, donc un simple clic suivi d'un retour en arrière laissait un "Package sans nom" persisté dans la liste. Corrigé : le brouillon reste local (`setEditingPkg`) tant qu'aucune vraie modification n'a été faite — `PackageEditor` persiste lui-même dès le premier changement réel (déjà son comportement existant, juste plus déclenché prématurément). Testé via Playwright : clic + retour immédiat → rien dans la liste ; clic + saisie d'un nom + retour → le package apparaît bien.
+
+Un point tranché avec Ron : le bouton "Déployer" sur chaque ligne de package (sélectionne le package + navigue vers `/deploy`) est renommé "Choisir" — même logique que Containers (le mot "déployer" ne doit désigner que l'action réelle de publication), mais gardé comme bouton dédié ici puisqu'il fait une vraie action (sélection du package), contrairement au CTA dupliqué de Containers qui a été supprimé.
+
+## Déployer, Monitoring, DataLayer Mapping, Plan de tracking — à venir
 
 Pas encore commencés. Reprendre dans cet ordre au prochain "go" de Ron sur ce chantier.

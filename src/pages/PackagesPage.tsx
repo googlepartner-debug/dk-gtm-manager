@@ -283,9 +283,12 @@ export function PackagesPage() {
   const [showTemplates, setShowTemplates] = useState(false);
   const [showVersionDiff, setShowVersionDiff] = useState(false);
 
+  // Ne persiste rien tant que l'utilisateur n'a rien saisi — un simple clic sur "Nouveau
+  // package" puis retour en arrière ne doit pas laisser un package fantôme "sans nom" dans
+  // la liste. PackageEditor persiste lui-même (via son propre `save`) dès la première vraie
+  // modification (nom, description, ajout d'une entité…).
   function openNew() {
     const pkg: DeploymentPackage = { ...EMPTY_PACKAGE, id: crypto.randomUUID(), createdAt: new Date().toISOString(), entities: { tags: [], variables: [], triggers: [] } };
-    upsertPackage(pkg);
     setEditingPkg(pkg);
   }
 
@@ -388,7 +391,7 @@ export function PackagesPage() {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-semibold text-foreground text-sm">{pkg.name || 'Package sans nom'}</span>
-                  <Badge variant="info">{pkg.client}</Badge>
+                  {pkg.client && <Badge variant="info">{pkg.client}</Badge>}
                   <Badge variant="default">{countEntities(pkg)} entité{countEntities(pkg) !== 1 ? 's' : ''}</Badge>
                 </div>
                 {pkg.description && <p className="text-xs text-muted-fg mt-0.5 truncate">{pkg.description}</p>}
@@ -407,7 +410,7 @@ export function PackagesPage() {
                   URL.revokeObjectURL(url);
                 }}>Exporter</Button>
                 <Button variant="secondary" size="sm" onClick={() => setEditingPkg(pkg)}>Modifier</Button>
-                <Button size="sm" onClick={() => { selectPackage(pkg.id); navigate('/dashboard/deploy'); }}>Déployer</Button>
+                <Button size="sm" onClick={() => { selectPackage(pkg.id); navigate('/dashboard/deploy'); }}>Choisir</Button>
                 <button className="text-border hover:text-destructive transition-colors p-1" onClick={() => { if (confirm(`Supprimer "${pkg.name}" ?`)) removePackage(pkg.id); }}>
                   <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                     <path d="M2 3.5h10M5 3.5V2.5h4v1M5.5 6v4M8.5 6v4M3 3.5l.5 8.5h7l.5-8.5" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round"/>

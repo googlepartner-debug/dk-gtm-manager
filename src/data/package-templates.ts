@@ -362,7 +362,7 @@ export const PACKAGE_TEMPLATES: { id: string; name: string; description: string;
   {
     id: 'dl-mapping-collector',
     name: 'DataLayer Mapping — Collecteur',
-    description: "Tag HTML personnalisé qui capture le vrai dataLayer.push() du site, anonymise et détecte les anomalies GA4 côté navigateur. Envoie vers un Google Sheet si {{DL Mapping - Sheets Endpoint}} est renseigné (voir src/features/datalayer-mapping/gtm-tag/dl-mapping-sheets-endpoint.gs.js à déployer manuellement en Apps Script), sinon capture 100% locale (localStorage, export manuel __dlMappingExport() en console) — dans ce cas, à tester en Preview GTM uniquement, jamais publié tel quel sur du trafic réel.",
+    description: 'Tag HTML personnalisé qui capture le vrai dataLayer.push() du site, anonymise et détecte les anomalies GA4 côté navigateur. Capture 100% locale par défaut (export manuel), ou envoi vers Google Sheets si un endpoint est configuré — voir PRD_DataLayerMapping.md §9.1 avant de publier sur du trafic réel.',
     category: 'DataLayer Mapping',
     template: {
       name: 'DataLayer Mapping — Collecteur (Noviscore)',
