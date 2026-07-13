@@ -28,6 +28,23 @@ const KNOWN_SHARED_DOMAINS = [
 const DOMAIN_RE = /\b(?:[a-z0-9-]+\.)+[a-z]{2,}\b/gi;
 const BARE_NUMERIC_ID_RE = /^\d{6,}$/;
 
+// A bare "word.word" shape is indistinguishable from a real domain by DOMAIN_RE alone — and
+// GA4/dataLayer variable paths use exactly that shape by convention (ecommerce.value,
+// ecommerce.shipping, ecommerce.items…), so every standard ecommerce package used to flood
+// this warning with false positives on its own variable names. Requiring the last segment to
+// be a real-looking TLD keeps genuine hostnames (turkishairlines.com) while dropping those.
+const REAL_TLDS = new Set([
+  'com', 'net', 'org', 'io', 'co', 'fr', 'de', 'es', 'it', 'uk', 'nl', 'be', 'ch', 'at', 'se',
+  'no', 'dk', 'fi', 'pl', 'app', 'dev', 'cloud', 'ai', 'shop', 'store', 'biz', 'info', 'me',
+  'tv', 'us', 'ca', 'jp', 'cn', 'ru', 'br', 'mx', 'au', 'xyz',
+]);
+
+// {{_event}} isn't a user-created or enableable built-in variable — it's the implicit token
+// GTM itself inserts as arg0 in every Custom Event trigger's condition (matches the fired
+// event name). Flagging it as a "ghost reference" fired on every single Custom Event trigger,
+// which is most of them in a typical GA4 package.
+const ALWAYS_VALID_REFS = new Set(['_event']);
+
 function scanEntity(
   kind: 'tag' | 'variable' | 'trigger',
   entity: GTMTag | GTMVariable | GTMTrigger,
@@ -42,7 +59,7 @@ function scanEntity(
     // Will silently resolve to nothing (or worse, an unrelated same-named entity) on a container
     // where nobody happens to have created something named exactly X.
     for (const ref of extractTemplateRefs(s)) {
-      if (declaredNames.has(ref) || BUILTIN_DISPLAY_TO_TYPE[ref]) continue;
+      if (declaredNames.has(ref) || BUILTIN_DISPLAY_TO_TYPE[ref] || ALWAYS_VALID_REFS.has(ref)) continue;
       warnings.push({
         severity: 'warning',
         entityKind: kind,
@@ -68,6 +85,8 @@ function scanEntity(
     // Domain-like literal (site-specific hostname) not in the shared-infra allowlist.
     for (const match of trimmed.matchAll(DOMAIN_RE)) {
       const domain = match[0].toLowerCase();
+      const tld = domain.slice(domain.lastIndexOf('.') + 1);
+      if (!REAL_TLDS.has(tld)) continue;
       if (KNOWN_SHARED_DOMAINS.some((known) => domain === known || domain.endsWith(`.${known}`))) continue;
       warnings.push({
         severity: 'info',

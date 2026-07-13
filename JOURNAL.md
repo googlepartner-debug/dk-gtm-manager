@@ -678,3 +678,16 @@ Deuxième page de l'ordre retenu (voir `wiki/ux-audit-chantier.md`). Audit avec 
 3. **"+ Nouveau package" créait un package fantôme** — Ron l'a signalé en plein audit : `openNew()` appelait `upsertPackage()` avant toute saisie, donc cliquer puis revenir en arrière laissait un "Package sans nom" persisté. Corrigé : le brouillon reste local (`setEditingPkg` seul) tant qu'aucune vraie modification n'a été faite ; `PackageEditor` persiste déjà lui-même dès le premier changement réel (comportement existant, juste déclenché trop tôt avant). Testé via Playwright : clic + retour immédiat → rien dans la liste ; clic + saisie d'un nom + retour → le package apparaît.
 
 Point tranché avec Ron : le bouton "Déployer" sur chaque ligne de package (sélectionne le package + navigue vers `/deploy`) renommé "Choisir" — même logique que Containers sur le mot "déployer", mais gardé comme bouton dédié ici puisqu'il fait une vraie action (sélection), contrairement au CTA dupliqué de Containers qui a lui été supprimé.
+
+---
+
+## 2026-07-14 (suite 6) — Chantier UX/UI, troisième page : Déployer
+
+Troisième page de l'ordre retenu. Injecté le vrai template GA4 Ecommerce Standard (pas de données inventées) dans le store pour pousser jusqu'à l'étape "select" du flow Déployer — deux bugs réels trouvés dans `validatePackage()` (`lib/package-validation.ts`), corrigés directement :
+
+1. **Faux positifs massifs "domaine propre à un site"** — un template sain affichait 15 avertissements sur des valeurs comme `ecommerce.value`, `ecommerce.shipping`, `ecommerce.tax`, `ecommerce.coupon`. `DOMAIN_RE` matche n'importe quel `mot.mot`, exactement la forme de la notation pointée des variables dataLayer GA4 — donc chaque variable ecommerce standard se faisait accuser d'être un nom de domaine codé en dur. Corrigé : nouvelle allowlist `REAL_TLDS`, le dernier segment doit ressembler à un vrai TLD (`.com`, `.fr`, `.io`…) pour compter comme un domaine.
+2. **`{{_event}}` signalé comme référence fantôme** — pas une variable utilisateur, c'est le jeton interne que GTM insère automatiquement comme `arg0` dans toute condition de déclencheur Custom Event. Se déclenchait sur les 5 triggers du template, donc sur quasiment tout package GA4 standard. Ajouté à une nouvelle exception `ALWAYS_VALID_REFS`.
+
+Après les deux corrections : 15 avertissements → 0 sur le même template, cohérent avec le fait qu'il avait déjà été corrigé (bug `firingTriggerId` du 2026-07-13). Testé via Playwright avec le vrai template + deux containers injectés dans le store.
+
+Point relevé mais pas tranché : "Modifications en attente" (renommages/opérations ad hoc depuis Monitoring) et "Déployer un package" (flow structuré avec diff) cohabitent sur la même page, chacun avec son propre CTA "Publier"/"Déployer" — deux modèles mentaux différents sous un seul vocabulaire. Réponse de Ron ambiguë sur la suite à donner (`je comprends ce que tu me demande`) — laissé en l'état, noté dans `wiki/ux-audit-chantier.md` pour y revenir si le sujet ressort.

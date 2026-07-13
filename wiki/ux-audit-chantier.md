@@ -25,6 +25,17 @@ Trois bugs réels trouvés (pas des choix de design — corrigés directement) :
 
 Un point tranché avec Ron : le bouton "Déployer" sur chaque ligne de package (sélectionne le package + navigue vers `/deploy`) est renommé "Choisir" — même logique que Containers (le mot "déployer" ne doit désigner que l'action réelle de publication), mais gardé comme bouton dédié ici puisqu'il fait une vraie action (sélection du package), contrairement au CTA dupliqué de Containers qui a été supprimé.
 
-## Déployer, Monitoring, DataLayer Mapping, Plan de tracking — à venir
+## Déployer — fait (2026-07-14)
+
+Deux bugs réels trouvés en injectant le vrai template GA4 Ecommerce Standard dans le store (pas de fausses données — le template existant) et en poussant jusqu'à l'étape "select" du flow :
+
+1. **Faux positifs massifs sur `validatePackage()`** (`lib/package-validation.ts`) — un template sain (GA4 Ecommerce Standard) affichait 15 avertissements "domaine propre à un site" sur des valeurs comme `ecommerce.value`, `ecommerce.shipping`, `ecommerce.tax`, `ecommerce.coupon`. Cause : `DOMAIN_RE` matche n'importe quel `mot.mot`, et la notation pointée des variables dataLayer GA4 a exactement cette forme. Corrigé en exigeant que le dernier segment soit un vrai TLD (`REAL_TLDS`, nouvelle allowlist) avant de considérer que c'est un domaine.
+2. **`{{_event}}` signalé comme référence fantôme** — ce n'est pas une variable créée par l'utilisateur, c'est le jeton interne que GTM insère automatiquement comme `arg0` dans toute condition de déclencheur Custom Event. Se déclenchait sur les 5 triggers du template (donc sur quasiment tout package GA4 standard). Corrigé en l'ajoutant à `ALWAYS_VALID_REFS`.
+
+Après les deux corrections : le même template passe de 15 avertissements à 0, comme attendu pour un template déjà validé auparavant (bug pré-existant du 2026-07-13 sur les `firingTriggerId`, voir plus haut dans le journal).
+
+**Point identifié, pas tranché** : "Modifications en attente" (renommages/opérations ad hoc depuis Monitoring) et "Déployer un package" (flow structuré avec diff) cohabitent empilés sur la même page `DeployPage.tsx`, chacun avec son propre CTA "Publier"/"Déployer" — deux modèles mentaux différents sous un seul vocabulaire. Réponse de Ron ambiguë sur la suite à donner — laissé en l'état, à retrancher si le sujet revient.
+
+## Monitoring, DataLayer Mapping, Plan de tracking — à venir
 
 Pas encore commencés. Reprendre dans cet ordre au prochain "go" de Ron sur ce chantier.
