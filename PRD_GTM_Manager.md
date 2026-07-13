@@ -1,9 +1,11 @@
 # PRD — DK GTM Manager
 
-**Version** : 1.3  
-**Date** : 2026-06-25  
+**Version** : 1.4  
+**Date** : 2026-07-10  
 **Auteur** : Digital Keys  
 **Statut** : Draft
+
+**Changelog v1.4** : Rollback (§4.6) implémenté (était prévu au PRD mais absent du code jusqu'ici). Capture automatique de la version live précédente avant toute publication (déploiement, nettoyage/suppression, renommage/duplication). Confirmation renforcée (saisie du mot "SUPPRIMER") sur les suppressions en CleaningTab. Ajout de la §20 Gouvernance & matrice de réversibilité.
 
 ---
 
@@ -178,6 +180,7 @@ PerfectStay (PFS) opère entre 10 et 30 sites web partageant le **même datalaye
 - **Contrôle d'accès natif GTM** : si un utilisateur n'a pas les droits GTM sur un container, l'API retourne une erreur (pas de contournement possible)
 - **Pas de rôles dans l'outil** : l'accès est contrôlé en amont dans GTM (DK ajoute les comptes PFS sur le compte GTM PFS)
 - **Tokens non persistés entre sessions** : à chaque nouvelle session, reconnexion requise
+- **Restriction de connexion (phase interne, v1.4)** : écran de consentement OAuth du projet GCP (`gtm-wbncv54-ngq1n`) en type **Interne** — Google refuse toute connexion hors de l'organisation `@digitalkeys.fr`, appliqué côté Google avant l'exécution du code, donc infalsifiable côté client. Doublé d'un check `ALLOWED_EMAILS` côté client (`src/lib/auth.ts`) qui ne restreint qu'à `googlepartner@digitalkeys.fr` — celui-ci est un garde-fou de confort (évite une connexion accidentelle par un autre consultant DK), pas une barrière de sécurité, et est contournable en éditant le bundle JS.
 
 ---
 
@@ -208,6 +211,8 @@ PerfectStay (PFS) opère entre 10 et 30 sites web partageant le **même datalaye
 3. Vérifier l'historique dans l'outil
 4. Déployer sur Vercel → URL stable
 5. Présentation PFS uniquement après validation interne
+
+**Allowlist temporaire (v1.4)** : pendant cette phase, la connexion est restreinte côté client à `googlepartner@digitalkeys.fr` (`ALLOWED_EMAILS` dans `src/lib/auth.ts`). Ce n'est pas une vraie barrière de sécurité — l'app est 100% frontend (§9), le vrai rempart reste les permissions natives GTM — mais évite une connexion accidentelle par un autre compte tant que PFS n'est pas censé y accéder. **À faire avant l'onboarding PFS (§10)** : ajouter les comptes `@perfectstay.com` concernés à `ALLOWED_EMAILS`.
 
 ---
 
@@ -370,10 +375,61 @@ Un package est un objet JSON contenant 3 listes : `tags`, `variables`, `triggers
 
 ---
 
-## 19. Backlog versions suivantes
+## 19. Gouvernance & matrice de réversibilité
+
+### 19.1 Rôles
+
+L'outil ne porte pas de système de rôles interne (§9), mais la gouvernance de la donnée qu'il manipule répartit deux responsabilités distinctes :
+
+| Rôle | Porté par | Responsabilité |
+|------|-----------|-----------------|
+| **Data owner** | Chaque métier (paid, SEO, merch, etc.) | Définit *quoi* tracker et pourquoi, sur son périmètre. Valide qu'un tag/variable répond à son besoin business. |
+| **Data steward** | Digital Keys (web analyst) | Opère la donnée au quotidien : implémente, structure, garantit la fiabilité technique du tracking et la traçabilité des changements. N'est pas seul responsable de la fiabilité globale — dépend aussi des inputs métiers. |
+
+PFS (§2) agit comme data owner ET opérateur technique ponctuel sur ses propres containers, en autonomie.
+
+### 19.2 Matrice de réversibilité
+
+Pour chaque action possible dans l'outil, ce qui se passe si elle doit être annulée.
+
+| Action | Réversible automatiquement (bouton dans l'outil) | Réversible manuellement | Non réversible |
+|--------|--------------------------------------------------|--------------------------|-----------------|
+| Déploiement upsert (§4.5), publication auto activée | ✅ Rollback (§4.6) depuis Historique — republie la version live précédente | ✅ Republier une ancienne version depuis GTM UI | — |
+| Déploiement upsert, publication manuelle | Non applicable — rien n'est publié, la version reste en brouillon | L'utilisateur publie ou ignore la version depuis GTM | — |
+| Suppression d'entités (CleaningTab, §4.4 Nettoyage) | ✅ Rollback depuis Historique (v1.4) | ✅ Republier l'ancienne version depuis GTM UI | — |
+| Renommage / duplication de tag ou variable (Monitoring) | ✅ Rollback depuis Historique (v1.4) | ✅ Republier l'ancienne version depuis GTM UI | — |
+| Création de workspace | — (jamais destructif : l'outil ne supprime ni n'écrase un workspace existant, §4.5) | — | — |
+| Modification faite directement dans GTM UI, hors de l'outil | Non — hors du périmètre de l'outil | ✅ Historique de versions natif GTM | — |
+| Suppression d'un package local (§4.3) | Non | Ressaisie manuelle du package | ✅ Si non exporté au préalable — n'affecte que le localStorage, jamais GTM |
+
+### 19.3 Limites connues du rollback
+
+- Le rollback capture la version live juste avant publication. Un container qui n'a **jamais été publié** avant (aucune version live) n'a pas de version à restaurer — le bouton rollback l'ignore et l'indique explicitement.
+- Les déploiements effectués **avant l'introduction du rollback (v1.4)** n'ont pas cette capture — le bouton n'apparaîtra pas rétroactivement sur l'historique antérieur.
+- Le rollback republie une version : il n'annule pas une action isolée dans le détail (ex. un seul tag parmi dix) — il restaure l'état complet du container tel qu'il était avant le déploiement concerné.
+
+---
+
+## 20. Backlog versions suivantes
 
 - **v1.1** : Rate limiting automatique entre containers (délai si 429)
 - **v1.2** : Import depuis container — sélectionner des entités directement depuis Turkish pour créer un package
 - **v1.3** : Multi-clients — gestion de plusieurs comptes GTM
-- **v1.4** : Partage de packages — URL partageable ou export/import entre utilisateurs en un clic
+- **v1.5** : Audit automatique de naming convention (Monitoring) — voir §21
+- **v1.6** : Partage de packages — URL partageable ou export/import entre utilisateurs en un clic
 - **v2.0** : Backend + BDD — packages partagés entre utilisateurs, notifications, audit log centralisé, séparation des historiques par utilisateur
+
+---
+
+## 21. Audit de naming convention (backlog, inspiré d'Avo)
+
+**Constat (2026-07-13)** : Avo (avo.app, tracking plan pour l'analytics produit) fait un audit automatique de naming convention sur les events/properties, avec un namespace global pour éviter les doublons. Digital Keys a déjà une référence écrite (`Naming_Convention_GTM___GA4.csv`) mais elle est statique — rien dans l'outil ne la fait respecter ni ne détecte les écarts.
+
+**Cas concret qui illustre le besoin** : le rename observé cette semaine ("GA4 - Begin Checkout" → "GA4 - begin_checkout", perfectstay.com) est exactement le genre d'incohérence qu'un check automatique aurait pu signaler avant qu'un humain ne le repère à l'œil dans Monitoring.
+
+**Proposition (à cadrer plus précisément avant implémentation)** :
+- Nouveau check dans Monitoring, à côté des détections existantes (orphelins, `detectRequiredBuiltInVariables`) : comparer les noms des tags/triggers/variables de chaque container à un jeu de règles dérivé de `Naming_Convention_GTM___GA4.csv` (préfixes attendus par plateforme — `GA4 -`, `FB -`, etc. —, casse cohérente, séparateurs cohérents `_` vs espace).
+- Détection de **quasi-doublons** entre containers (même entité nommée différemment selon le container — ex. "GA4 - Begin Checkout" sur un container, "GA4 - begin_checkout" sur un autre pour le même événement) — utile spécifiquement pour PFS où plusieurs containers partagent le même datalayer et devraient converger vers les mêmes noms.
+- Affichage : nouvel onglet ou section dans Monitoring, liste des écarts avec le nom actuel vs le nom attendu, et un lien direct vers le renommage déjà existant (`RenameOperation`/`applyContainerQueue`) pour corriger en un clic plutôt que de juste signaler.
+
+**Non retenu pour l'instant** : un namespace global bloquant (empêcher la création d'un doublon à la source, comme le fait Avo) — nécessiterait de intercepter la création d'entités au moment du package/queue, plus intrusif qu'un simple audit a posteriori. À reconsidérer si l'audit a posteriori s'avère insuffisant en usage réel.

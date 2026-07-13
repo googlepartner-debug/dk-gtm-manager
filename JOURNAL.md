@@ -474,3 +474,75 @@ Nouvel onglet qui analyse le vrai dataLayer capturé sur un site (pas la config 
 - Uniformisation du pattern "Absente/Créer" (pilule rouge, icône ✕→+ au survol, repris de Monitoring) sur les matrices variables d'`EventsPage` et de DataLayer Mapping
 - Modale de duplication (`QuickCreatePanel`, Monitoring) élargie 400px→480px
 - Audit et correction des effets de hover manquants ou trop subtils (`hover:opacity-70` remplacé par de vrais changements de fond) sur une dizaine de boutons à travers l'app ; contrastes vérifiés au passage, pas de vrai risque blanc-sur-blanc trouvé malgré l'inquiétude initiale
+
+---
+
+## 2026-07-10 — Rollback implémenté, durcissement suppression, matrice de réversibilité
+
+Suite à une conférence data (DAMA, gouvernance, data owner/steward, matrice de réversibilité) et une inquiétude légitime de Ron sur le risque de casse de données client via l'outil, audit de sécurité complet du code (pas seulement du PRD) puis trois chantiers.
+
+**Audit préalable**
+
+`deploy()` confirmé upsert-only (jamais de DELETE), workspaces jamais écrasés (`resolveBlankWorkspace`), publication auto jamais silencieuse. Seul vrai point de risque : les fonctions `deleteVariable/Trigger/Tag` dans `gtm-api.ts`, isolées à `CleaningTab.tsx` (Monitoring → Nettoyage) et déjà protégées par une modale de preview. Écart trouvé : le Rollback (§4.6 du PRD) était documenté mais jamais codé — tooltip mensonger dans `HistoryPage.tsx`.
+
+**Rollback (§4.6)**
+
+- `DeploymentResult.previousVersionId` : capturé via `getLiveVersion()` juste avant chaque `publishVersion()`, dans `deploy()`, `applyDeletions()` et `publishWorkspaceVersion()` (donc déploiements, suppressions ET renommages/duplications sont tous rollback-éligibles)
+- `DeploymentRecord.autoPublish` (nouveau champ obligatoire) — seuls les déploiements auto-publiés sont éligibles au rollback (les manuels n'ont rien touché en live)
+- Nouvelle action store `rollback(token, record)` : republie, container par container, la version qui était live avant le déploiement ; isolation des erreurs comme `deploy()` ; persiste `rolledBackAt`/`rollbackResults` via nouveau `updateDeploymentRecord()` dans `storage.ts`
+- UI : `RollbackPanel` dans `HistoryPage.tsx` — double confirmation (bouton puis modale d'avertissement explicite), progress en temps réel par container, badge "Annulé le [date]" une fois fait
+- Limite assumée et documentée : les containers sans version live antérieure (premier déploiement) ou les déploiements d'avant cette version n'ont pas de `previousVersionId` → rollback marqué "ignoré" avec message clair, pas d'échec silencieux
+
+**Durcissement CleaningTab**
+
+Modale de suppression déjà bien conçue (preview tableau, nom de version obligatoire) mais renforcée : saisie obligatoire du mot "SUPPRIMER" pour débloquer le bouton final, note de réassurance rappelant que l'action sera annulable depuis l'Historique une fois le Rollback en place.
+
+**Piège tsc évité** : `npx tsc --noEmit` sans `-p tsconfig.app.json` ne vérifie rien du tout sur ce projet composite (root `tsconfig.json` a `files: []` + `references`) — retourne toujours exit 0 même avec de vraies erreurs de type. Toujours utiliser `npx tsc --noEmit -p tsconfig.app.json` pour ce repo.
+
+**PRD v1.4**
+
+Nouvelle §19 "Gouvernance & matrice de réversibilité" : rôles data owner (métiers) / data steward (DK), tableau action → réversible auto / manuel / non réversible, limites connues du rollback. Backlog renuméroté §19→§20.
+
+**Allowlist de connexion temporaire**
+
+Ron a demandé de restreindre l'accès à `googlepartner@digitalkeys.fr` uniquement, le temps de la validation interne (§12). Ajout de `ALLOWED_EMAILS`/`isEmailAllowed()` dans `auth.ts`, vérifié à deux endroits : au login (`auth-store.ts`, avec révocation du token Google si l'email n'est pas autorisé) et au chargement d'une session persistée (`loadAuthState()`, pour ne pas laisser un ancien état localStorage contourner un allowlist réduit après coup).
+
+Ron a ensuite demandé une vraie protection, indépendante des permissions GTM ("je m'en fiche des gens qui ont accès aux containers GTM"). Le check `ALLOWED_EMAILS` a été signalé comme du théâtre de sécurité : 100% côté client, contournable en éditant le bundle JS ou le localStorage. Deux vraies options présentées : (A) écran de consentement OAuth GCP en type "Interne" (Google bloque tout compte hors `@digitalkeys.fr` avant même l'exécution du code — infalsifiable côté client, aucun code à écrire), (B) middleware Vercel Edge + vérification serveur de l'ID token + cookie de session signé (verrouille précisément `googlepartner@` mais ajoute une vraie surface backend, nécessite un déploiement Vercel réel pour tester). Ron a choisi (A) uniquement — guidé pour le réglage dans la console GCP du projet `gtm-wbncv54-ngq1n` (§9 du PRD mis à jour). `ALLOWED_EMAILS` conservé en complément, recommenté pour clarifier que ce n'est plus qu'un garde-fou de confort (évite qu'un autre consultant DK légitime utilise cet outil par erreur), pas la barrière de sécurité réelle.
+
+Discussion annexe (pas de code) sur l'hébergement : sous-domaine `tracking-manager.digitalkeys.fr` proposé et validé — plus explicite que d'exposer "gtm" publiquement. Tentative de délégation du sous-domaine à Cloudflare via `Connect a domain` échouée ("root domain only" — le partial/CNAME setup est réservé aux plans Enterprise). Le domaine racine `digitalkeys.fr` ne migrera pas sur Cloudflare, donc retour à un CNAME direct chez l'hébergeur DNS actuel du domaine, pointé vers Vercel — Cloudflare n'apporte rien ici puisque Vercel gère déjà SSL/CDN. Note Vercel Hobby (gratuit) : CGU réservées à l'usage non-commercial, techniquement le plan Pro serait requis pour un outil d'agence — à trancher avant la démo PFS (§12).
+
+**Publication groupée multi-containers + noms de version explicites**
+
+Ron : la queue "Modifications en attente" (Déployer) ne publiait qu'un container à la fois, et le nom de version par défaut ("Déploiement — ...") ne disait pas ce qui avait changé.
+
+- `buildActionPrefix()` (nouveau, `DeployPage.tsx`) : préfixe dynamique selon le type d'opération en attente sur le container (Renommage / Retrait déclencheur / Synchronisation déclencheur / Duplication tag / Duplication variable, combinables avec " + ") — remplace le générique "Déploiement". Logique extraite dans `buildQueueVersionMeta()`, partagée entre la carte individuelle et la publication groupée.
+- Checkbox de sélection sur chaque `ContainerQueueCard`, "Tout sélectionner/désélectionner", bouton "Publier N containers →" en tête de section. Publication **séquentielle** (pas en parallèle : `applyContainerQueue` pose un état global `isApplyingContainerQueue`/`applyPublishErrors` partagé dans le store — des appels concurrents se marcheraient dessus) avec isolation des erreurs par container (même logique que `deploy()`), progress affiché en temps réel réutilisant `StepIcon`.
+- Sélection par défaut = tous les containers ; se resynchronise sur "tout sélectionné" si le set de containers en attente change (nouveau container ajouté à la queue depuis Monitoring, ou un autre entièrement traité).
+
+---
+
+## 2026-07-13 — Focus Mode éditable, InfoTooltip en badge, veille concurrentielle (Trooper, Avo)
+
+**`InfoTooltip` redesigné en badge**
+
+Ron : voulait ce type de badge (comme "Annulé le [date]" dans HistoryPage) plutôt qu'un simple rond "i". Le composant (`src/components/ui/InfoTooltip.tsx`) garde le même comportement (popover au clic) mais le déclencheur est maintenant un vrai pill badge (icône + texte "À quoi sert cette page ?"), même langage visuel que `Badge.tsx`. Aucun changement d'API — les 9 pages qui l'utilisent n'ont pas eu à être touchées.
+
+**Focus Mode (Plan Kanban) rendu configurable**
+
+`FUNNEL_STEPS` était une constante en dur (`view_item_list, view_item, begin_checkout, purchase`) dans `DatalayerKanbanPage.tsx`. Ron voulait pouvoir modifier les events qui le composent.
+
+- `DEFAULT_FUNNEL_STEPS` déplacé dans `constants/ga4Events.ts` comme fallback
+- Nouveau `focusEvents: Record<clientId, string[]>` dans `datalayerStore.ts` (persisté par profil, même pattern que le reste du store), avec `getFocusEvents(clientId)` (retombe sur le défaut si rien de custom) et `setFocusEvents(clientId, events)`
+- `purgeClient` nettoie aussi l'entrée `focusEvents` du client supprimé
+- UI : bouton ⚙ à côté du toggle "⚡ Focus Mode", popover `FocusModeEditor` — réordonnancement (↑↓, pas de drag-and-drop, inutile pour une poignée d'étapes séquentielles), suppression, ajout par nom d'event tapé au clavier
+
+**Veille concurrentielle : Trooper et Avo**
+
+Ron a reçu le pitch de deux outils comparables et a demandé d'en extraire ce qui manque à dk-gtm-manager :
+
+- **Trooper** (audit quotidien GA4/Piano sur BigQuery, consensus multi-algorithme anti-faux-positifs) → ajout de la §9.6 dans `PRD_DataLayerMapping.md` : déviation % vs moyenne glissante 7j (calcul manquant sur la table `datalayer_variable_daily` déjà prévue en Phase B), volumétrie d'événement comme signal indépendant de la complétion de paramètres (nécessite un rollup par event, pas seulement par variable), badge Anomaly/OK, réduction de faux positifs par conditions combinées plutôt qu'un vrai ensemble de modèles. Explicitement conçu pour ne dépendre d'aucun export BigQuery côté client (le collecteur maison reste la seule source universelle) — après discussion, BigQuery repositionné en option de recoupement V2 pour la volumétrie uniquement (plus fiable que le comptage client-side sur ce point précis : déjà dédupliqué/filtré des bots côté serveur GA4), pas une dépendance bloquante.
+- **Avo** (tracking plan pour l'analytics produit, Plan→Implement→Verify) → ajout de la §21 dans `PRD_GTM_Manager.md` : audit automatique de naming convention (Digital Keys a déjà `Naming_Convention_GTM___GA4.csv` en référence statique, jamais fait respecter par l'outil), détection de quasi-doublons entre containers PFS. Le document d'étude fourni par Ron confirme aussi la direction générale (agent IA + source de vérité versionnée + review humaine + vérification post-déploiement) et le créneau agence (Avo ne committe jamais dans le repo/container du client, pensé pour des équipes produit internes). Backlog `PRD_GTM_Manager.md` §20 renuméroté (le v1.4 y était encore listé comme futur alors que déjà livré cette semaine — collision corrigée, "Partage de packages" décalé en v1.6).
+
+**Discussion non actée : accès BigQuery pour les clients sans compte GCP**
+
+Ron s'interroge sur un moyen simple de lier BigQuery aux propriétés GA4 clients (la plupart n'ont pas de compte GCP et se perdraient dans la Google Cloud Console) et sur le coût réel de BigQuery. Recherché et confirmé : l'export GA4→BigQuery est gratuit, BigQuery a un vrai palier gratuit (1 To requêtes/mois, 10 Go stockage/mois), mais un compte de facturation (CB) doit être attaché au projet GCP pour éviter le mode Sandbox (expiration des tables à 60 jours, inutilisable pour une baseline glissante). Piste proposée : DK possède le(s) projet(s) GCP avec sa propre facturation, ne demande que le rôle Editor sur la propriété GA4 du client (même niveau d'accès que ce qui est déjà demandé pour GTM) et fait le lien depuis son propre compte — le client ne touche jamais à Google Cloud Console. Pas encore documenté dans un PRD, discussion à trancher.

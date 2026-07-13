@@ -23,9 +23,7 @@
 
 ## Rollback button
 
-**Description** : dans HistoryPage, bouton pour re-déployer une version précédente sur des containers (revenir en arrière).
-**État** : pas encore implémenté. OAuth n'est plus le blocage (API GTM live disponible) — reste à construire l'UI et le flow de rollback.
-**Défini dans** : PRD v1.4.
+**État : implémenté depuis le 2026-07-10 (PRD v1.4, §4.6/§19).** Chaque publication auto (`deploy()`, `applyDeletions()`, `applyContainerQueue()`/`publishWorkspaceVersion()`) capture désormais la version live juste avant de publier par-dessus (`DeploymentResult.previousVersionId`, via `getLiveVersion()`). Depuis HistoryPage, bouton "Annuler le déploiement" → `rollback()` republie cette version antérieure, container par container, isolation des erreurs comme `deploy()`. Limites connues : pas de version antérieure sur un premier déploiement jamais publié, et les déploiements faits avant le 2026-07-10 n'ont pas cette capture rétroactivement — voir PRD §19.3.
 
 ## DataLayer Mapping — Phase B (collecteur → Supabase)
 
