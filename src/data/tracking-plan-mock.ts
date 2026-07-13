@@ -5,16 +5,17 @@ import type { TrackingPlan } from '../features/tracking-plan/types/trackingPlan.
 //
 // Statuts obtenus par recoupement avec les données mock déjà en place (pas de statut stocké
 // en dur ici, PRD_TrackingPlan.md §5) :
-// - "purchase" / "view_item" → Vérifié (bonne complétion dans MOCK_DATALAYER_VARIABLES,
-//   src/data/datalayer-mock.ts)
+// - "purchase" / "view_item" → Implémenté (bonne complétion dans MOCK_DATALAYER_VARIABLES,
+//   src/data/datalayer-mock.ts — un vrai dataLayer.push() est détecté en prod)
 // - "add_shipping_info" / "add_payment_info" → Planifié (0 occurrence dans le mock — reflète
 //   la vraie régression Noviscore du 14/04 déjà documentée ailleurs dans le repo)
 // - "sign_up" / "view_cart" → Planifié (aucune donnée nulle part, events jamais implémentés)
-// "Implémenté" ne peut pas apparaître avec ce seed seul : ça demande aussi de charger les
-// données mock Monitoring (bouton "Charger les données de démonstration" sur Événements),
-// et ce mock Monitoring-là couvre des containers compagnies aériennes, pas Noviscore — donc
-// aucun des deux mocks ne se recoupe pour produire "Implémenté" tel quel. À corriger avec un
-// vrai jeu de données Monitoring dédié à Noviscore si ce statut doit être démontré aussi.
+// "Configuré" (tag GTM posé, event pas encore capté en prod) ne peut pas apparaître avec ce
+// seed seul : ça demande aussi de charger les données mock Monitoring (bouton "Charger les
+// données de démonstration" sur Événements), et ce mock Monitoring-là couvre des containers
+// compagnies aériennes, pas Noviscore — donc aucun des deux mocks ne se recoupe pour produire
+// "Configuré" tel quel. Comblé différemment par test-container-mock.ts (2026-07-14), qui
+// utilise un référentiel dédié plutôt que de corriger ce mock Noviscore.
 export const MOCK_TRACKING_PLAN: TrackingPlan = {
   clientId: 'noviscore',
   createdAt: '2026-07-14T09:00:00.000Z',

@@ -86,17 +86,19 @@ interface TrackingPlanScreenshot {
 
 ---
 
-## 5. Cycle de vie — Planifié → Implémenté → Vérifié
+## 5. Cycle de vie — Planifié → Configuré → Implémenté
 
 Inspiré du Plan → Implement → Verify d'Avo (étude du 2026-07-13) — une bonne idée reprise et adaptée, pas une tentative de se différencier d'eux. Elle est réalisable ici parce que dk-gtm-manager a déjà les deux briques nécessaires (Monitoring + Dictionnaire DataLayer Mapping) :
+
+**Nommage revu le 2026-07-14** (retour utilisateur) : "Implémenté" doit désigner ce qu'un web analyst appelle réellement implémenté — un vrai `dataLayer.push()` détecté en prod, pas juste un tag GTM posé. D'où le renommage de l'étape intermédiaire en "Configuré".
 
 | Statut | Condition | Source |
 |---|---|---|
 | **Planifié** | L'event existe dans le plan, rien d'autre | — |
-| **Implémenté** | Un tag/trigger correspondant à `eventName` existe dans au moins un container scanné | `monitoringData` (Monitoring, déjà scanné) |
-| **Vérifié** | L'event est réellement capté dans le dataLayer, avec un taux de complétion ≥ seuil | `events`/`variables` du Dictionnaire (DataLayer Mapping) |
+| **Configuré** | Un tag/trigger correspondant à `eventName` existe dans au moins un container scanné | `monitoringData` (Monitoring, déjà scanné) |
+| **Implémenté** | L'event est réellement capté dans le dataLayer, avec un taux de complétion ≥ seuil | `events`/`variables` du Dictionnaire (DataLayer Mapping) |
 
-Affiché par site (comme les badges de couverture déjà en place dans le Kanban DataLayer Mapping : "✅ vérifié sur N containers", "🟡 implémenté mais pas vérifié chez N partenaires", "⚪ planifié seulement").
+Affiché par site (comme les badges de couverture déjà en place dans le Kanban DataLayer Mapping : "✅ implémenté sur N containers", "🟡 configuré mais pas implémenté chez N partenaires", "⚪ planifié seulement").
 
 **Note sur le champ `owner`** : c'est l'endroit concret où la distinction data owner (métier : paid/seo/merch, décide quoi tracker) / data steward (DK, opère et garantit la fiabilité technique) qu'on avait discutée devient un champ produit, pas juste un concept. Texte libre en v1, éventuellement une liste fermée plus tard si un vocabulaire commun émerge à l'usage.
 

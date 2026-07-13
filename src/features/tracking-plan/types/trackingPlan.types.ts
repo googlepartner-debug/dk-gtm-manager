@@ -41,6 +41,8 @@ export interface TrackingPlan {
   events: TrackingPlanEvent[];
 }
 
-// Never persisted — always recomputed by cross-referencing Monitoring (implémenté) and
-// DataLayer Mapping's Dictionnaire (vérifié), PRD §5.
-export type EventStatus = 'planifie' | 'implemente' | 'verifie';
+// Never persisted — always recomputed by cross-referencing Monitoring (configuré) and
+// DataLayer Mapping's Dictionnaire (implémenté), PRD §5. "Implémenté" = un vrai
+// dataLayer.push() est détecté en prod (le dev a codé le push) — pas juste le tag GTM posé,
+// c'est ça qui distingue de "configuré" (2026-07-14, retour utilisateur sur le nommage).
+export type EventStatus = 'planifie' | 'configure' | 'implemente';

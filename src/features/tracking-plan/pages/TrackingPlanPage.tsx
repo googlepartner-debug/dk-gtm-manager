@@ -26,8 +26,8 @@ const PRIORITY_COLOR: Record<EventPriority, string> = {
 
 const STATUS_META: Record<EventStatus, { label: string; variant: 'default' | 'info' | 'success' }> = {
   planifie: { label: 'Planifié', variant: 'default' },
-  implemente: { label: 'Implémenté', variant: 'info' },
-  verifie: { label: 'Vérifié', variant: 'success' },
+  configure: { label: 'Configuré', variant: 'info' },
+  implemente: { label: 'Implémenté', variant: 'success' },
 };
 
 function StatusBadge({ status }: { status: EventStatus }) {
@@ -36,8 +36,9 @@ function StatusBadge({ status }: { status: EventStatus }) {
 }
 
 // PRD §5 — status is never stored, always recomputed by crossing the plan with what's
-// actually implemented in GTM (Monitoring) and what's really captured in prod (DataLayer
-// Mapping's Dictionnaire).
+// actually configured in GTM (Monitoring, tag posé) and what's really implemented in prod
+// (DataLayer Mapping's Dictionnaire, un vrai dataLayer.push() détecté — c'est ça qui compte
+// comme "Implémenté" pour un web analyst, pas juste le tag GTM, 2026-07-14).
 function useEventStatus(clientId: string | null, siteIds: string[]) {
   const monitoringData = useGTMStore((s) => s.monitoringData);
   const getEventCoverage = useDatalayerStore((s) => s.getEventCoverage);
@@ -46,9 +47,9 @@ function useEventStatus(clientId: string | null, siteIds: string[]) {
   return (eventName: string): EventStatus => {
     if (!clientId) return 'planifie';
     const coverage = getEventCoverage(clientId, eventName);
-    if (coverage.okSites > 0) return 'verifie';
+    if (coverage.okSites > 0) return 'implemente';
     const row = chainRows.find((r) => r.eventName === eventName);
-    if (row && siteIds.some((id) => row.containers[id]?.tagPresent)) return 'implemente';
+    if (row && siteIds.some((id) => row.containers[id]?.tagPresent)) return 'configure';
     return 'planifie';
   };
 }
@@ -366,7 +367,7 @@ function EventDetailPanel({
   const chainRow = chainRows.find((r) => r.eventName === event.eventName);
   const coverage = getEventCoverage(clientId, event.eventName);
 
-  const implementedSites = siteIds.filter((id) => chainRow?.containers[id]?.tagPresent);
+  const configuredSites = siteIds.filter((id) => chainRow?.containers[id]?.tagPresent);
   const [copied, setCopied] = useState(false);
   const [lightbox, setLightbox] = useState<{ dataUrl: string; caption?: string } | null>(null);
   const pushSnippet = buildDataLayerPushSnippet(event);
@@ -401,8 +402,8 @@ function EventDetailPanel({
           </div>
           <div className="p-4 space-y-2">
             <p className="text-xs font-semibold text-muted-fg uppercase tracking-wide">Dans GTM (Monitoring)</p>
-            {implementedSites.length > 0 ? (
-              <p className="text-xs text-success">✓ Implémenté sur {implementedSites.length}/{siteIds.length} container(s)</p>
+            {configuredSites.length > 0 ? (
+              <p className="text-xs text-success">✓ Configuré sur {configuredSites.length}/{siteIds.length} container(s)</p>
             ) : (
               <p className="text-xs text-muted-fg">Aucun tag trouvé pour cet event dans les containers scannés.</p>
             )}
@@ -410,7 +411,7 @@ function EventDetailPanel({
           <div className="p-4 space-y-2">
             <p className="text-xs font-semibold text-muted-fg uppercase tracking-wide">Dans le dataLayer réel</p>
             {coverage.okSites > 0 ? (
-              <p className="text-xs text-success">✓ Vérifié sur {coverage.okSites}/{coverage.totalSites || siteIds.length} site(s)</p>
+              <p className="text-xs text-success">✓ Implémenté sur {coverage.okSites}/{coverage.totalSites || siteIds.length} site(s)</p>
             ) : coverage.totalSites > 0 ? (
               <p className="text-xs text-destructive">Capté mais sous le seuil de complétion sur les {coverage.totalSites} site(s) suivis.</p>
             ) : (
@@ -543,7 +544,7 @@ export function TrackingPlanPage() {
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-xl font-bold text-foreground">Plan de tracking</h1>
-            <InfoTooltip>Source de vérité des events/paramètres attendus, à la place du Gsheet/Excel. Statut calculé automatiquement : Planifié (dans le plan) → Implémenté (trouvé dans GTM via Monitoring) → Vérifié (réellement capté en prod via DataLayer Mapping).</InfoTooltip>
+            <InfoTooltip>Source de vérité des events/paramètres attendus, à la place du Gsheet/Excel. Statut calculé automatiquement : Planifié (dans le plan) → Configuré (tag posé dans GTM via Monitoring) → Implémenté (dataLayer.push() réellement détecté en prod via DataLayer Mapping).</InfoTooltip>
           </div>
           <p className="text-sm text-muted-fg mt-1">{activeClient?.clientName}</p>
         </div>

@@ -9,7 +9,7 @@ import type { TrackingPlan } from '../features/tracking-plan/types/trackingPlan.
 // tracking d'un coup. Contrairement aux autres mocks (Noviscore, compagnies aériennes) qui
 // vivent chacun dans leur silo, celui-ci utilise volontairement le même identifiant comme
 // containerId GTM (Monitoring) ET comme siteId DataLayer Mapping, pour que le recoupement
-// cross-store produise les 3 statuts du Plan de tracking (Planifié / Implémenté / Vérifié) —
+// cross-store produise les 3 statuts du Plan de tracking (Planifié / Configuré / Implémenté) —
 // voir tracking-plan-mock.ts pour le contexte du trou que ça comble.
 export const TEST_CONTAINER_ID = 'GTM-TESTDEMO01';
 export const TEST_CLIENT_ID = 'test-sandbox';
@@ -34,8 +34,8 @@ const TEST_TAGS: MonitoringContainerData['tags'] = [
     ],
   },
   {
-    // Implémenté côté GTM mais jamais recoupé côté DataLayer Mapping (pas d'event
-    // add_to_cart dans TEST_DATALAYER_EVENTS) — démontre le statut "Implémenté" seul.
+    // Configuré côté GTM mais jamais recoupé côté DataLayer Mapping (pas d'event
+    // add_to_cart dans TEST_DATALAYER_EVENTS) — démontre le statut "Configuré" seul.
     name: 'GA4 — add_to_cart', type: 'gaawe', firingTriggerId: ['tt02'], parameter: [
       { type: 'template', key: 'measurement_id', value: '{{Constante - GA4 ID}}' },
       { type: 'template', key: 'event_name',     value: 'add_to_cart' },
@@ -44,7 +44,7 @@ const TEST_TAGS: MonitoringContainerData['tags'] = [
     ],
   },
   {
-    // Autre cas "Implémenté" : le tag existe et se déclenche, mais l'event n'a jamais été
+    // Autre cas "Configuré" : le tag existe et se déclenche, mais l'event n'a jamais été
     // capté en prod (occurrences=0, statut 'problem' côté DataLayer Mapping) — la nuance
     // avec add_to_cart ci-dessus est volontaire (deux causes réelles différentes).
     name: 'GA4 — begin_checkout', type: 'gaawe', firingTriggerId: ['tt05'], parameter: [
