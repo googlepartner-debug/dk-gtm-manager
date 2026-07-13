@@ -11,19 +11,24 @@
   window.__dlMappingActive__ empêche toute double-initialisation si le tag se déclenche
   plusieurs fois (SPA, re-render GTM, etc.).
 
-  MODE LOCAL (2026-07-13, en attendant la Phase B Supabase) — pas d'endpoint réseau : le
-  buffer s'accumule dans localStorage (survit à la navigation entre pages du même site) au
-  lieu d'être envoyé à une Edge Function. Pendant une session d'audit, ouvre la console du
-  site et lance :
-    __dlMappingExport()  → télécharge un fichier JSON à importer dans DK GTM Manager
-                            (page DataLayer Mapping → bouton "Importer un export")
-    __dlMappingClear()   → vide le buffer local pour repartir d'une session propre
-  Quand la Phase B Supabase existe, remplacer flush() par un vrai POST réseau — tout le
-  reste (interception, anonymisation, détection d'anomalies) ne change pas.
+  DEUX DESTINATIONS (2026-07-13) :
+  1. Google Sheets (via dl-mapping-sheets-endpoint.gs.js, déployé en Apps Script Web App) —
+     si {{DL Mapping - Sheets Endpoint}} est renseigné, chaque flush POST le batch vers cet
+     endpoint. C'est la voie recommandée pour capturer du vrai trafic (pas seulement ta
+     propre session d'audit) sans attendre la Phase B Supabase.
+  2. localStorage — toujours écrit en parallèle, quel que soit l'état de l'endpoint, comme
+     filet de secours (échec réseau) et pour l'export manuel pendant une session Preview :
+       __dlMappingExport()  → télécharge un fichier JSON à importer dans DK GTM Manager
+       __dlMappingClear()   → vide le buffer local
+  Si l'endpoint n'est pas configuré (variable vide), le tag fonctionne quand même en mode
+  100% local — c'est le cas par défaut tant que le Sheet n'a pas été déployé.
+  Quand la Phase B Supabase existe, remplacer l'URL de l'endpoint par celle de l'Edge
+  Function — le format de payload ne change pas, seul le destinataire change.
 
   Variables GTM à interpoler avant de coller ce tag dans l'éditeur :
-  - {{DL Mapping - Client ID}}     → identifiant du client (ex: "noviscore")
-  - {{Container ID}}               → variable native GTM, sert de siteId (PRD §3)
+  - {{DL Mapping - Client ID}}       → identifiant du client (ex: "noviscore")
+  - {{DL Mapping - Sheets Endpoint}} → URL /exec du script Apps Script (vide = mode local uniquement)
+  - {{Container ID}}                 → variable native GTM, sert de siteId (PRD §3)
 -->
 <script>
 (function () {
@@ -33,6 +38,7 @@
   // ── Configuration (remplacée par GTM à l'insertion du tag) ──────────────────
   var CLIENT_ID = '{{DL Mapping - Client ID}}';
   var SITE_ID = '{{Container ID}}';
+  var ENDPOINT_URL = '{{DL Mapping - Sheets Endpoint}}';
   var STORAGE_KEY = 'dl_mapping_buffer_' + CLIENT_ID + '_' + SITE_ID;
 
   // ── Constantes partagées avec l'app (PRD §5, §14.3) — tenir synchronisées
@@ -160,18 +166,43 @@
     } catch (e) { return []; }
   }
 
-  function flush() {
-    if (buffer.length === 0) return;
-    try {
-      var stored = readStored().concat(buffer);
-      if (stored.length > MAX_STORED_OCCURRENCES) stored = stored.slice(stored.length - MAX_STORED_OCCURRENCES);
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(stored));
-      buffer = [];
-    } catch (e) { /* best-effort — localStorage full or unavailable, never block the page */ }
+  // Is the endpoint variable actually configured, or still the unresolved {{...}} placeholder
+  // (e.g. package deployed before the Apps Script URL was filled in)?
+  function endpointConfigured() {
+    return ENDPOINT_URL && ENDPOINT_URL.length > 0 && ENDPOINT_URL.charAt(0) !== '{';
   }
 
-  setInterval(flush, FLUSH_INTERVAL_MS);
-  window.addEventListener('pagehide', flush);
+  function flush(useBeacon) {
+    if (buffer.length === 0) return;
+    var toSend = buffer;
+    buffer = [];
+
+    // Always cache locally too — cheap resilience if the network send fails, and keeps
+    // __dlMappingExport()/Preview-mode debugging working even once the endpoint is live.
+    try {
+      var stored = readStored().concat(toSend);
+      if (stored.length > MAX_STORED_OCCURRENCES) stored = stored.slice(stored.length - MAX_STORED_OCCURRENCES);
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(stored));
+    } catch (e) { /* best-effort — localStorage full or unavailable, never block the page */ }
+
+    if (!endpointConfigured()) return;
+
+    // text/plain (not application/json) deliberately — a JSON content-type triggers a CORS
+    // preflight (OPTIONS) that Apps Script Web Apps don't handle, silently breaking every
+    // send. text/plain is a CORS "simple request", no preflight, and e.postData.contents on
+    // the Apps Script side gets the raw body either way.
+    var payload = JSON.stringify({ clientId: CLIENT_ID, siteId: SITE_ID, occurrences: toSend });
+    if (useBeacon && navigator.sendBeacon) {
+      navigator.sendBeacon(ENDPOINT_URL, new Blob([payload], { type: 'text/plain;charset=utf-8' }));
+      return;
+    }
+    try {
+      fetch(ENDPOINT_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: payload, keepalive: true, mode: 'no-cors' });
+    } catch (e) { /* best-effort — never block the page on a monitoring failure */ }
+  }
+
+  setInterval(function () { flush(false); }, FLUSH_INTERVAL_MS);
+  window.addEventListener('pagehide', function () { flush(true); });
 
   // ── Manual export/clear — call from the browser console during a live audit session ──
   window.__dlMappingExport = function () {

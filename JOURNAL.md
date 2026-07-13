@@ -595,3 +595,25 @@ Ron a besoin de faire le vrai mapping datalayer de Noviscore maintenant, pas dan
 - **Testé** : upload réel d'un PNG du repo, confirmé recompressé en JPEG (27 Ko en sortie, `data:image/jpeg;base64,...`) et affiché correctement
 
 **Discussion non actée : extension Chrome pour screenshot + édition dataLayer en phase de test** — idée soulevée par Ron, pas encore cadrée ni construite.
+
+---
+
+## 2026-07-13 (suite 3) — Package "DataLayer Mapping — Collecteur", bug template GA4 corrigé, destination Google Sheets
+
+Ron a demandé de packager le collecteur pour le pousser en une fois sur les 4 containers Noviscore, en demandant explicitement de vérifier mentalement le parcours et de chercher les angles morts avant de coder.
+
+**Angle mort majeur identifié et corrigé en amont** : publier ce tag sur les containers live instrumenterait chaque vrai visiteur (écriture permanente dans son navigateur, sans lien avec le consentement CMP existant) pour un résultat inexploitable — la donnée resterait dans le navigateur de chacun, inaccessible à Ron. Recommandation : publication manuelle + test en Preview GTM tant qu'aucune destination centralisée n'existe. Ron a ensuite précisé vouloir quand même instrumenter du vrai trafic — clarifié que ce n'est pas une question de risque de stockage mais d'absence totale de centralisation sans backend (aucune simplification du tag, y compris retirer la détection d'anomalies, ne contourne ce point).
+
+**Bug pré-existant trouvé et corrigé** : le template "GA4 Ecommerce Standard" (`package-templates.ts`) créait des tags sans déclencheur en silence. Ses triggers portaient un champ `triggerId: 'tpl-xxx'` (placeholder local) et les tags référençaient ce placeholder dans `firingTriggerId`, alors que `deploy()` résout les déclencheurs par **nom** (`triggerNameToId`, `gtm-store.ts`) — la référence ne matchait jamais rien, était filtrée avec un `console.warn` ignoré en pratique, et le tag partait sans déclencheur. Vérifié par un agent de traçage de code avant d'être répliqué dans le nouveau template. Corrigé : suppression des champs `triggerId` (interdits par le PRD §17 de toute façon), `firingTriggerId` pointent désormais vers le vrai `name` du trigger.
+
+**Nouveau template "DataLayer Mapping — Collecteur"** (`package-templates.ts`, catégorie "DataLayer Mapping") :
+- Tag HTML personnalisé (`type: 'html'`, pas de Custom Template Sandboxed JS — confirmé de nouveau techniquement impossible), contenu = script du collecteur intégré tel quel
+- Référence le déclencheur natif **"All Pages"** déjà présent par défaut dans chaque container — aucun trigger à créer, un point de défaillance en moins, contourne aussi le pattern bugué ci-dessus
+- Deux variables constantes : `DL Mapping - Client ID` (`"noviscore"`, identique sur les 4 containers) et `DL Mapping - Sheets Endpoint` (vide par défaut = mode 100% local)
+
+**Destination Google Sheets ajoutée** (Ron : "le plus simple" après arbitrage Sheets vs Excel/SharePoint — Excel/Graph API aurait demandé une fonction serveur intermédiaire, pas juste un script) :
+- `src/features/datalayer-mapping/gtm-tag/dl-mapping-sheets-endpoint.gs.js` : script Apps Script (`doPost`) qui ajoute une ligne par occurrence dans un onglet "Occurrences" — à déployer manuellement par Ron (création du Sheet, collage du script, déploiement en Application Web "Tout le monde"), pas automatisable depuis l'outil
+- Collecteur modifié (`dl-mapping-collector.html` + template embarqué) : `flush()` continue d'écrire en localStorage (filet de secours + export manuel Preview) et POST en plus vers `{{DL Mapping - Sheets Endpoint}}` si la variable est renseignée. `Content-Type: text/plain` déclaré exprès — `application/json` déclenche un preflight CORS qu'Apps Script Web App ne gère pas, ce qui aurait cassé silencieusement chaque envoi
+- Limites documentées dans le script et le PRD : quotas d'exécution Apps Script/jour, dégradation Sheets au-delà de quelques centaines de milliers de lignes, URL non authentifiée (acceptable car payload déjà anonymisé côté tag)
+
+**Validé via Playwright** : le nouveau template se charge avec 1 tag/2 variables, le tag affiche "Déclenché par : All Pages", le contenu HTML (7723 caractères) contient bien la variable d'endpoint, le `fetch`, et le `sendBeacon`. Le fix du template GA4 revérifié aussi : les 6 tags affichent désormais chacun leur déclencheur résolu par nom au lieu d'un warning silencieux.
