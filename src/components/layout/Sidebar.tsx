@@ -30,15 +30,6 @@ const nav = [
   {
     icon: (
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-        <path d="M8 1.5L10.5 6H15L11.5 9l1.5 5L8 11.5 3 14l1.5-5L1 6h4.5L8 1.5z" fill="currentColor" opacity="0.8"/>
-      </svg>
-    ),
-    label: 'Déployer',
-    to: '/dashboard/deploy',
-  },
-  {
-    icon: (
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
         <rect x="1" y="1" width="4" height="4" rx="1" fill="currentColor" opacity="0.4"/>
         <rect x="6" y="1" width="4" height="4" rx="1" fill="currentColor"/>
         <rect x="11" y="1" width="4" height="4" rx="1" fill="currentColor" opacity="0.6"/>

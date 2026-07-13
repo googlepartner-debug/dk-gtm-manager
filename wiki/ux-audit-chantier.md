@@ -14,6 +14,8 @@ Points traités (Ron a choisi "tout") :
 
 **CTA "Publier" déplacé dans le header global (2026-07-14, retour utilisateur en cours de session)** — Ron a signalé deux problèmes après le premier passage : le mot "déploiement" dans le CTA de ContainersPage n'est pas approprié (on ne fait que naviguer vers l'étape suivante, rien n'est publié à ce stade), et le badge numérique à côté de "Déployer" dans la sidebar (`Sidebar.tsx`, `isDeploy && selectedCount > 0`) n'a pas sa place — un vrai CTA "Publier" en haut à droite du header global, comme le bouton Submit de GTM, est plus juste. Implémenté : badge retiré de la sidebar, bouton "Aller au déploiement →" retiré de `ContainersPage.tsx` (header ET bloc dupliqué en bas de la liste — gardé uniquement le texte informatif "X containers sélectionnés"), nouveau bouton "Publier [N]" dans `Header.tsx` (toujours visible dès qu'une sélection existe, peu importe la page consultée, navigue vers `/dashboard/deploy`).
 
+**Entrée "Déployer" retirée de la sidebar** — dernier ajustement demandé par Ron : maintenant que "Publier" vit dans le header global, l'entrée `/dashboard/deploy` dans le menu de gauche faisait doublon. Retirée du tableau `nav` de `Sidebar.tsx`. La route `/dashboard/deploy` (`App.tsx`) reste intacte — seul point d'entrée restant : le CTA "Publier" du header.
+
 ## Packages, Déployer, Monitoring, DataLayer Mapping, Plan de tracking — à venir
 
 Pas encore commencés. Reprendre dans cet ordre au prochain "go" de Ron sur ce chantier.
