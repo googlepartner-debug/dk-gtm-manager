@@ -691,3 +691,13 @@ Troisième page de l'ordre retenu. Injecté le vrai template GA4 Ecommerce Stand
 Après les deux corrections : 15 avertissements → 0 sur le même template, cohérent avec le fait qu'il avait déjà été corrigé (bug `firingTriggerId` du 2026-07-13). Testé via Playwright avec le vrai template + deux containers injectés dans le store.
 
 Point relevé mais pas tranché : "Modifications en attente" (renommages/opérations ad hoc depuis Monitoring) et "Déployer un package" (flow structuré avec diff) cohabitent sur la même page, chacun avec son propre CTA "Publier"/"Déployer" — deux modèles mentaux différents sous un seul vocabulaire. Réponse de Ron ambiguë sur la suite à donner (`je comprends ce que tu me demande`) — laissé en l'état, noté dans `wiki/ux-audit-chantier.md` pour y revenir si le sujet ressort.
+
+---
+
+## 2026-07-14 (suite 7) — Chantier UX/UI, quatrième page : Monitoring
+
+Quatrième page de l'ordre retenu — la plus volumineuse (~7100 lignes cumulées `MonitoringPage.tsx` + composants). Audit avec le vrai container de test, en parcourant les 7 onglets.
+
+Un bug réel trouvé et corrigé : **libellé dupliqué dans l'onglet Distribution** (`DistributionTab.tsx`) — un nœud "GA4 — Configuration" avec plusieurs events groupés dessous affichait "GA4" deux fois d'affilée. Le fallback de regroupement (ligne ~486, comportement volontaire et documenté : retombe sur le nom de la plateforme plutôt qu'un nom de tag arbitraire quand plusieurs events/tags sont fusionnés dans un même nœud) produisait un libellé identique au badge plateforme affiché juste au-dessus. Corrigé en cachant la seconde ligne quand elle duplique exactement le badge, sans toucher à la logique de regroupement.
+
+Reste de la page vérifié fonctionnel sans bug : Paramètres envoyés (matrice spec officielle GA4), Nettoyage (détection orphelins — corrects, les 2 variables orphelines détectées reflètent une incohérence dans les données du container de test lui-même, pas un bug de l'outil), Recommandations (règles Google Ads/GA4/Piano/Matomo).

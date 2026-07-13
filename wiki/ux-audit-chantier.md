@@ -36,6 +36,14 @@ Après les deux corrections : le même template passe de 15 avertissements à 0,
 
 **Point identifié, pas tranché** : "Modifications en attente" (renommages/opérations ad hoc depuis Monitoring) et "Déployer un package" (flow structuré avec diff) cohabitent empilés sur la même page `DeployPage.tsx`, chacun avec son propre CTA "Publier"/"Déployer" — deux modèles mentaux différents sous un seul vocabulaire. Réponse de Ron ambiguë sur la suite à donner — laissé en l'état, à retrancher si le sujet revient.
 
-## Monitoring, DataLayer Mapping, Plan de tracking — à venir
+## Monitoring — fait (2026-07-14)
+
+Page la plus volumineuse du chantier (~7100 lignes cumulées sur `MonitoringPage.tsx` + composants) — audit avec le vrai container de test (`seedTestContainer()`), en parcourant les 7 onglets (Tags/Déclencheurs/Variables/Paramètres envoyés/Distribution/Nettoyage/Recommandations).
+
+Un bug réel trouvé et corrigé : **libellé dupliqué dans l'onglet Distribution** (`DistributionTab.tsx`) — un nœud "GA4 — Configuration" avec plusieurs events groupés dessous affichait "GA4" deux fois d'affilée (le badge plateforme en petit, puis le nom du tag juste en dessous, retombé sur `cfg.platform` par le fallback de regroupement ligne ~486 qui donne délibérément un libellé générique quand plusieurs tags/events sont fusionnés dans un même nœud). Corrigé en cachant la seconde ligne quand elle est strictement identique au badge du dessus, sans toucher à la logique de regroupement elle-même (qui a sa propre justification documentée en commentaire).
+
+Le reste (Paramètres envoyés — matrice spec officielle GA4, Nettoyage — détection orphelins, Recommandations — règles Google Ads/GA4/Piano/Matomo) vérifié fonctionnel, pas de bug trouvé. Les 2 variables orphelines détectées (`DLV - ecommerce`, `DLV - event`) reflètent une incohérence dans les données du container de test lui-même (`test-container-mock.ts` déclare ces deux variables mais les tags référencent en fait `DLV - ecommerce.transaction_id` etc.) — comportement correct de l'outil, pas un bug, pas corrigé (tangent à l'audit UX, pas de conséquence utilisateur réelle).
+
+## DataLayer Mapping, Plan de tracking — à venir
 
 Pas encore commencés. Reprendre dans cet ordre au prochain "go" de Ron sur ce chantier.

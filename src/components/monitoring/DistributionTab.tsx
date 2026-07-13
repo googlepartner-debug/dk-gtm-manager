@@ -727,7 +727,12 @@ function ContainerFlowDiagram({ flow, highlighted, onHighlight, onNodeClick, onE
                   </span>
                 )}
               </div>
-              <div className="text-[11px] font-medium text-foreground truncate leading-tight">{cfg.tagName}</div>
+              {/* Quand le fallback de regroupement retombe sur le nom de la plateforme (ligne
+                  ~486), ça duplique exactement le badge juste au-dessus — pas la peine de
+                  répéter "GA4" deux fois d'affilée. */}
+              {cfg.tagName !== cfg.platform && (
+                <div className="text-[11px] font-medium text-foreground truncate leading-tight">{cfg.tagName}</div>
+              )}
               {cfg.children.length > 0 && (
                 <div className="text-[10px] mt-0.5 flex items-center gap-1" style={{ color: style.color }}>
                   {cfg.children.length} event{cfg.children.length > 1 ? 's' : ''}
