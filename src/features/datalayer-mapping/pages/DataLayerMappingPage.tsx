@@ -43,15 +43,38 @@ export function DataLayerMappingPage() {
   const {
     clients, activeClientId, activeSiteId, setActiveClient, setActiveSite,
     loadMockData, getSiteDashboard, getEventsForSite, getAlerts, dictionary, variables,
+    importOccurrences,
   } = useDatalayerStore();
 
   const [tab, setTab] = useState<Tab>('events');
   const [showGlossary, setShowGlossary] = useState(false);
   const [drillEvent, setDrillEvent] = useState<string | null>(null);
+  const [importNotice, setImportNotice] = useState<{ kind: 'success' | 'error'; text: string } | null>(null);
 
   useEffect(() => {
     if (clients.length === 0) loadMockData();
   }, [clients.length, loadMockData]);
+
+  async function handleImportFile(file: File | undefined) {
+    if (!file) return;
+    setImportNotice(null);
+    try {
+      const parsed = JSON.parse(await file.text());
+      if (!parsed || typeof parsed !== 'object' || !parsed.clientId || !parsed.siteId || !Array.isArray(parsed.occurrences)) {
+        setImportNotice({ kind: 'error', text: 'Fichier invalide — attendu un export généré par __dlMappingExport() (tag collecteur).' });
+        return;
+      }
+      const summary = importOccurrences(parsed);
+      setActiveClient(summary.clientId);
+      setActiveSite(summary.siteId);
+      setImportNotice({
+        kind: 'success',
+        text: `Importé : ${summary.eventsFound} event(s), ${summary.variablesFound} variable(s), ${summary.occurrencesImported} occurrence(s) sur ${summary.siteId}.`,
+      });
+    } catch {
+      setImportNotice({ kind: 'error', text: "Fichier illisible — vérifie que c'est bien un export JSON du collecteur." });
+    }
+  }
 
   const activeClient = clients.find((c) => c.clientId === activeClientId);
   const dashboard = activeClientId && activeSiteId ? getSiteDashboard(activeClientId, activeSiteId) : null;
@@ -61,16 +84,38 @@ export function DataLayerMappingPage() {
 
   return (
     <div className="max-w-6xl">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <div className="flex items-center gap-2">
+      <div className="flex items-start justify-between flex-wrap gap-3 mb-6">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
             <h1 className="text-xl font-bold text-foreground">DataLayer Mapping</h1>
             <InfoTooltip>Analyse le vrai dataLayer capturé sur le site (pas la config GTM déclarée) — taux de complétion par variable, anomalies de type GA4, et détection des variables sans équivalent GTM à créer d'un clic.</InfoTooltip>
           </div>
           <p className="text-sm text-muted-fg mt-1">Analyse statistique du dataLayer réel — audit continu, pas ponctuel.</p>
         </div>
-        <Button variant="secondary" size="sm" onClick={() => setShowGlossary(true)}>Glossaire</Button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <label className="cursor-pointer">
+            <input type="file" accept=".json" className="hidden" onChange={(e) => { handleImportFile(e.target.files?.[0]); e.target.value = ''; }} />
+            <span className="inline-flex items-center gap-1.5 h-9 px-4 text-sm font-semibold bg-card border border-border rounded-lg hover:bg-muted transition-colors text-foreground cursor-pointer">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                <path d="M7 1v8M4 6l3 3 3-3M2 10v1.5A1.5 1.5 0 003.5 13h7a1.5 1.5 0 001.5-1.5V10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              Importer un export
+            </span>
+          </label>
+          <Button variant="secondary" size="sm" onClick={() => setShowGlossary(true)}>Glossaire</Button>
+        </div>
       </div>
+
+      {importNotice && (
+        <div
+          className="mb-4 px-3 py-2 rounded-lg text-xs"
+          style={importNotice.kind === 'success'
+            ? { backgroundColor: 'hsl(142 60% 95%)', color: 'hsl(142 60% 25%)' }
+            : { backgroundColor: 'hsl(0 84% 96%)', color: 'hsl(0 84% 40%)' }}
+        >
+          {importNotice.text}
+        </div>
+      )}
 
       {/* Client / Site selector */}
       <div className="flex items-center gap-3 mb-5">

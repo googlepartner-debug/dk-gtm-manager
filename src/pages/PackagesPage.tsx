@@ -324,15 +324,15 @@ export function PackagesPage() {
 
   return (
     <div className="max-w-3xl">
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <div className="flex items-center gap-2">
+      <div className="mb-6 flex items-start justify-between flex-wrap gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
             <h1 className="text-xl font-bold text-foreground">Packages de déploiement</h1>
             <InfoTooltip>Un package regroupe des tags, variables et déclencheurs à déployer ensemble sur plusieurs containers — utile pour propager une config validée (ex. GA4 Ecommerce) sans la recréer à la main container par container. Crée-le ici, déploie-le depuis "Déployer".</InfoTooltip>
           </div>
           <p className="text-sm text-muted-fg mt-1">Tags, variables et déclencheurs à déployer en batch.</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <label className="cursor-pointer">
             <input type="file" accept=".json" className="hidden" onChange={importFile} />
             <span className="inline-flex items-center gap-1.5 h-9 px-4 text-sm font-semibold bg-card border border-border rounded-lg hover:bg-muted transition-colors text-foreground cursor-pointer">

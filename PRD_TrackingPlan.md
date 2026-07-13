@@ -60,6 +60,7 @@ interface TrackingPlanEvent {
   owner?: string;                    // data owner métier responsable (paid/seo/merch/...) — voir note §5
   platforms: ('GA4' | 'Piano' | 'Matomo' | 'Ads')[];
   parameters: TrackingPlanParameter[];
+  screenshots: TrackingPlanScreenshot[];
 }
 
 interface TrackingPlanParameter {
@@ -70,9 +71,18 @@ interface TrackingPlanParameter {
   exampleValue: string;
   description: string;      // sens métier en une phrase
 }
+
+interface TrackingPlanScreenshot {
+  id: string;
+  dataUrl: string;    // base64, redimensionné + recompressé en JPEG côté navigateur avant stockage (localStorage, pas de backend — voir §7)
+  caption?: string;
+  addedAt: string;
+}
 ```
 
 **Le statut n'est jamais stocké** — toujours recalculé en croisant trois sources (voir §5), pour ne jamais désynchroniser le plan de la réalité.
+
+**Screenshots (2026-07-13)** : preuve/contexte de test attachée à un event (dataLayer réel observé en devtools, comportement du site). Redimensionnées (max 1600px) et recompressées en JPEG qualité 0.75 avant stockage (`utils/resizeImage.ts`) — un screenshot retina brut fait 3-5 Mo, ce qui viderait le quota localStorage (~5-10 Mo/origine) après une poignée d'events sans cette étape.
 
 ---
 

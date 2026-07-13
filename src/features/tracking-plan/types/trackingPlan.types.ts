@@ -14,6 +14,13 @@ export interface TrackingPlanParameter {
   description: string;      // business meaning, one sentence
 }
 
+export interface TrackingPlanScreenshot {
+  id: string;
+  dataUrl: string;   // base64 data URL — resized/compressed client-side before storage (localStorage, no backend)
+  caption?: string;
+  addedAt: string;
+}
+
 export interface TrackingPlanEvent {
   id: string;
   eventName: string;        // technical name, e.g. "purchase"
@@ -25,6 +32,7 @@ export interface TrackingPlanEvent {
   owner?: string;            // data owner (métier responsable) — free text v1, PRD §5
   platforms: Platform[];
   parameters: TrackingPlanParameter[];
+  screenshots: TrackingPlanScreenshot[];
 }
 
 export interface TrackingPlan {

@@ -90,8 +90,8 @@ export function ContainersPage() {
 
   return (
     <div className="max-w-4xl">
-      <div className="mb-6 flex items-start justify-between gap-4">
-        <div>
+      <div className="mb-6 flex items-start justify-between flex-wrap gap-4">
+        <div className="min-w-0">
           <div className="flex items-center gap-2">
             <h1 className="text-xl font-bold text-foreground">Containers GTM</h1>
             <InfoTooltip>Choisis les containers GTM sur lesquels tu veux agir — c'est la première étape avant un déploiement, un scan Monitoring ou une action en masse. Ta sélection est réutilisée sur les autres pages.</InfoTooltip>

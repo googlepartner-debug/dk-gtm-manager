@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { TrackingPlan, TrackingPlanEvent, TrackingPlanParameter } from '../types/trackingPlan.types';
+import type { TrackingPlan, TrackingPlanEvent, TrackingPlanParameter, TrackingPlanScreenshot } from '../types/trackingPlan.types';
 
 function tryParse<T>(raw: string | null, fallback: T): T {
   if (!raw) return fallback;
@@ -25,14 +25,18 @@ interface TrackingPlanState {
   getPlan: (clientId: string) => TrackingPlan | null;
   createPlan: (clientId: string) => void;
 
-  addEvent: (clientId: string, event: Omit<TrackingPlanEvent, 'id' | 'parameters'>) => string;
-  updateEvent: (clientId: string, eventId: string, updates: Partial<Omit<TrackingPlanEvent, 'id' | 'parameters'>>) => void;
+  addEvent: (clientId: string, event: Omit<TrackingPlanEvent, 'id' | 'parameters' | 'screenshots'>) => string;
+  updateEvent: (clientId: string, eventId: string, updates: Partial<Omit<TrackingPlanEvent, 'id' | 'parameters' | 'screenshots'>>) => void;
   removeEvent: (clientId: string, eventId: string) => void;
   removeEvents: (clientId: string, eventIds: string[]) => void;
 
   addParameter: (clientId: string, eventId: string, param: Omit<TrackingPlanParameter, 'id'>) => void;
   updateParameter: (clientId: string, eventId: string, paramId: string, updates: Partial<Omit<TrackingPlanParameter, 'id'>>) => void;
   removeParameter: (clientId: string, eventId: string, paramId: string) => void;
+
+  addScreenshot: (clientId: string, eventId: string, screenshot: Omit<TrackingPlanScreenshot, 'id' | 'addedAt'>) => void;
+  updateScreenshot: (clientId: string, eventId: string, screenshotId: string, updates: Partial<Pick<TrackingPlanScreenshot, 'caption'>>) => void;
+  removeScreenshot: (clientId: string, eventId: string, screenshotId: string) => void;
 }
 
 function updatePlan(state: TrackingPlanState, clientId: string, mutate: (plan: TrackingPlan) => TrackingPlan): Persisted {
@@ -61,7 +65,7 @@ export const useTrackingPlanStore = create<TrackingPlanState>((set, get) => ({
   addEvent: (clientId, event) => {
     const id = crypto.randomUUID();
     set((state) => ({
-      plans: updatePlan(state, clientId, (plan) => ({ ...plan, events: [...plan.events, { ...event, id, parameters: [] }] })),
+      plans: updatePlan(state, clientId, (plan) => ({ ...plan, events: [...plan.events, { ...event, id, parameters: [], screenshots: [] }] })),
     }));
     persist(get().activeProfileId, get().plans);
     return id;
@@ -124,6 +128,46 @@ export const useTrackingPlanStore = create<TrackingPlanState>((set, get) => ({
         ...plan,
         events: plan.events.map((e) =>
           e.id === eventId ? { ...e, parameters: e.parameters.filter((p) => p.id !== paramId) } : e,
+        ),
+      })),
+    }));
+    persist(get().activeProfileId, get().plans);
+  },
+
+  addScreenshot: (clientId, eventId, screenshot) => {
+    set((state) => ({
+      plans: updatePlan(state, clientId, (plan) => ({
+        ...plan,
+        events: plan.events.map((e) =>
+          e.id === eventId
+            ? { ...e, screenshots: [...e.screenshots, { ...screenshot, id: crypto.randomUUID(), addedAt: new Date().toISOString() }] }
+            : e,
+        ),
+      })),
+    }));
+    persist(get().activeProfileId, get().plans);
+  },
+
+  updateScreenshot: (clientId, eventId, screenshotId, updates) => {
+    set((state) => ({
+      plans: updatePlan(state, clientId, (plan) => ({
+        ...plan,
+        events: plan.events.map((e) =>
+          e.id === eventId
+            ? { ...e, screenshots: e.screenshots.map((s) => (s.id === screenshotId ? { ...s, ...updates } : s)) }
+            : e,
+        ),
+      })),
+    }));
+    persist(get().activeProfileId, get().plans);
+  },
+
+  removeScreenshot: (clientId, eventId, screenshotId) => {
+    set((state) => ({
+      plans: updatePlan(state, clientId, (plan) => ({
+        ...plan,
+        events: plan.events.map((e) =>
+          e.id === eventId ? { ...e, screenshots: e.screenshots.filter((s) => s.id !== screenshotId) } : e,
         ),
       })),
     }));

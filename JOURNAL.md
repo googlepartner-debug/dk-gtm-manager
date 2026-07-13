@@ -569,3 +569,29 @@ Ron a validé le PRD (`PRD_TrackingPlan.md`) et demandé l'implémentation, avec
 **`InfoTooltip` étendu** : nouveau prop `label` (défaut : le texte page-level existant) pour permettre la réutilisation inline à côté d'un champ de formulaire ("Data owner") sans afficher le texte "À quoi sert cette page ?" hors contexte — repéré en testant, pas en relisant le code.
 
 **Validé de bout en bout via Playwright** (pas juste `tsc`/lint) : création de plan, ajout d'event, statut "Vérifié" calculé correctement sur les données mock Noviscore, sélection groupée + suppression avec confirmation, génération de push avec cas complexe (wildcard tableau + valeur numérique + placeholder mixte dans le même event).
+
+---
+
+## 2026-07-13 (suite 2) — Bug de layout Packages, capture DataLayer Mapping sans Supabase, screenshots
+
+**Bug de layout corrigé (signalé par capture d'écran)**
+
+`PackagesPage.tsx` : la barre d'outils (Importer JSON / Comparer / Depuis un template / Nouveau package) chevauchait le titre et le badge `InfoTooltip` faute de `flex-wrap`. Cause : `flex items-center justify-between` sans wrap sur le conteneur, et la ligne de boutons elle-même sans wrap non plus — à l'étroit, les boutons débordaient au lieu de passer à la ligne. Audité les 10 autres pages pour le même pattern : bug confirmé aussi sur `MonitoringPage.tsx` (3 boutons conditionnels), corrigé pareil. Défensif aussi sur `ContainersPage.tsx` et `DataLayerMappingPage.tsx` (1 bouton chacun, risque plus faible mais coût nul à corriger). `Landing.tsx` laissé tel quel (header `h-14` fixe, 2 petits éléments, wrap y serait pire que le risque actuel).
+
+**DataLayer Mapping : capture réelle sans attendre Supabase**
+
+Ron a besoin de faire le vrai mapping datalayer de Noviscore maintenant, pas dans une future Phase B. Le tag collecteur (`dl-mapping-collector.html`) faisait déjà tout le travail difficile (interception non-destructive de `dataLayer.push`, anonymisation deux couches, détection d'anomalies) — il ne lui manquait qu'une destination, jusque-là un endpoint Supabase qui n'existe pas encore.
+
+- Collecteur modifié : `flush()` écrit désormais dans le `localStorage` du site audité (plus de `fetch`/`sendBeacon` réseau), avec un plafond `MAX_STORED_OCCURRENCES` (5000) pour ne pas remplir le quota sur une session oubliée. Deux fonctions exposées sur `window` pour l'audit manuel : `__dlMappingExport()` (télécharge un JSON) et `__dlMappingClear()`.
+- Nouveau `src/features/datalayer-mapping/utils/importCollectorExport.ts` : recalcule events/variables à partir des occurrences brutes importées — catégorie GA4 inférée, type de variable inféré depuis la valeur, anomalies (type mismatch, devise invalide) recalculées **par variable** (plus précis que le dédoublonnage par occurrence que fait le tag). Fusionne avec l'existant : priorité/statut/notes déjà saisis à la main sur un event/variable connu sont préservés, seules les stats (comptages, échantillons) sont remplacées par la donnée fraîche. Crée le client/site s'il n'existait pas encore.
+- Bouton "Importer un export" sur `DataLayerMappingPage.tsx`, avec notification de résultat (X events, Y variables, Z occurrences).
+- **Testé de bout en bout** avec un export synthétique (2 events, anomalie type mismatch + devise invalide volontaires) : les deux anomalies remontent avec le bon message dans l'onglet Alertes, la priorité/statut hérités des events mock existants (`purchase`, `view_item`) sont bien préservés.
+
+**Screenshots dans le Plan de tracking**
+
+- `TrackingPlanEvent.screenshots: TrackingPlanScreenshot[]` (id, dataUrl, caption?, addedAt) — nouvelles actions store `addScreenshot`/`updateScreenshot`/`removeScreenshot`
+- `utils/resizeImage.ts` : redimensionne (max 1600px) et recompresse en JPEG qualité 0.75 via canvas avant stockage — un screenshot retina brut fait 3-5 Mo, incompatible avec le quota localStorage après quelques events
+- UI : upload multi-fichiers dans le drawer d'édition (galerie de vignettes, légende éditable, suppression), galerie en lecture seule dans le panneau de détail, lightbox plein écran au clic
+- **Testé** : upload réel d'un PNG du repo, confirmé recompressé en JPEG (27 Ko en sortie, `data:image/jpeg;base64,...`) et affiché correctement
+
+**Discussion non actée : extension Chrome pour screenshot + édition dataLayer en phase de test** — idée soulevée par Ron, pas encore cadrée ni construite.

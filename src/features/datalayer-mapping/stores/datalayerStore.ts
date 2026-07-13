@@ -8,6 +8,7 @@ import {
 } from '../../../data/datalayer-mock';
 import { ALERT_THRESHOLD, MAX_UNIQUE_VALUES, DEFAULT_FUNNEL_STEPS } from '../constants/ga4Events';
 import { routeOccurrences } from '../utils/pageRouter';
+import { importCollectorExport, type CollectorExportPayload, type ImportSummary } from '../utils/importCollectorExport';
 
 function tryParse<T>(raw: string | null, fallback: T): T {
   if (!raw) return fallback;
@@ -51,6 +52,10 @@ interface DatalayerState extends Persisted {
   updateDefinition: (id: string, definition: string) => void;
 
   purgeClient: (clientId: string) => void;
+
+  // Import a JSON export from the dl-mapping-collector.html tag's __dlMappingExport()
+  // (local-storage capture, no Supabase required — see PRD §9.1, 2026-07-13 amendment).
+  importOccurrences: (payload: CollectorExportPayload, siteName?: string) => ImportSummary;
 
   // PRD §14.6 — Focus Mode funnel steps, editable per client.
   getFocusEvents: (clientId: string) => string[];
@@ -169,6 +174,18 @@ export const useDatalayerStore = create<DatalayerState>((set, get) => ({
       };
     });
     persist(get().activeProfileId, { clients: get().clients, events: get().events, variables: get().variables, dictionary: get().dictionary, occurrences: get().occurrences, focusEvents: get().focusEvents });
+  },
+
+  importOccurrences: (payload, siteName) => {
+    const result = importCollectorExport(payload, {
+      clients: get().clients,
+      events: get().events,
+      variables: get().variables,
+      occurrences: get().occurrences,
+    }, siteName);
+    set({ clients: result.clients, events: result.events, variables: result.variables, occurrences: result.occurrences });
+    persist(get().activeProfileId, { clients: get().clients, events: get().events, variables: get().variables, dictionary: get().dictionary, occurrences: get().occurrences, focusEvents: get().focusEvents });
+    return result.summary;
   },
 
   getFocusEvents: (clientId) => get().focusEvents[clientId] ?? DEFAULT_FUNNEL_STEPS,

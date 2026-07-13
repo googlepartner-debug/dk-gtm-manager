@@ -4,6 +4,7 @@ import { useGTMStore } from '../../../store/gtm-store';
 import { useTrackingPlanStore } from '../stores/trackingPlanStore';
 import { computeEventChain } from '../../../lib/event-chain';
 import { buildDataLayerPushSnippet } from '../utils/generatePush';
+import { resizeImageFile } from '../utils/resizeImage';
 import { Badge } from '../../../components/ui/Badge';
 import { Button } from '../../../components/ui/Button';
 import { InfoTooltip } from '../../../components/ui/InfoTooltip';
@@ -214,6 +215,8 @@ function EventEditorDrawer({
               Les paramètres se gèrent une fois l'event créé — enregistre d'abord, puis rouvre-le.
             </p>
           )}
+
+          {event && <ScreenshotSection clientId={clientId} event={event} />}
         </div>
 
         <div className="px-6 py-4 border-t border-border flex items-center gap-2 sticky bottom-0 bg-card">
@@ -260,6 +263,91 @@ function ParamRow({
   );
 }
 
+// ─── Screenshots — attach QA/test evidence to an event ──────────────────────────────
+
+function ScreenshotLightbox({ dataUrl, caption, onClose }: { dataUrl: string; caption?: string; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-6" style={{ backgroundColor: 'rgba(0,0,0,0.75)' }} onClick={onClose}>
+      <div className="max-w-4xl max-h-[90vh] flex flex-col items-center gap-2" onClick={(e) => e.stopPropagation()}>
+        <img src={dataUrl} alt={caption ?? 'Screenshot'} className="max-w-full max-h-[80vh] rounded-lg object-contain" />
+        {caption && <p className="text-xs text-white/80">{caption}</p>}
+        <button onClick={onClose} className="text-xs text-white/70 hover:text-white mt-1">Fermer</button>
+      </div>
+    </div>
+  );
+}
+
+function ScreenshotSection({ clientId, event }: { clientId: string; event: TrackingPlanEvent }) {
+  const { addScreenshot, updateScreenshot, removeScreenshot } = useTrackingPlanStore();
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [lightbox, setLightbox] = useState<{ dataUrl: string; caption?: string } | null>(null);
+
+  async function handleFiles(files: FileList | null) {
+    if (!files || files.length === 0) return;
+    setUploading(true);
+    setError(null);
+    try {
+      for (const file of Array.from(files)) {
+        if (!file.type.startsWith('image/')) continue;
+        const dataUrl = await resizeImageFile(file);
+        addScreenshot(clientId, event.id, { dataUrl });
+      }
+    } catch {
+      setError('Impossible de lire une des images — réessaie ou change de format (PNG/JPEG).');
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  return (
+    <div className="pt-3 border-t border-border space-y-2">
+      <label className="text-xs font-semibold text-muted-fg uppercase tracking-wide flex items-center gap-1">
+        Screenshots
+        <InfoTooltip label="?">Capture d'écran de test (dataLayer réel observé, comportement du site) — sert de preuve/contexte à côté de la spec.</InfoTooltip>
+      </label>
+
+      {event.screenshots.length > 0 && (
+        <div className="grid grid-cols-4 gap-2">
+          {event.screenshots.map((s) => (
+            <div key={s.id} className="relative group">
+              <button
+                type="button"
+                onClick={() => setLightbox({ dataUrl: s.dataUrl, caption: s.caption })}
+                className="block w-full aspect-video rounded-lg overflow-hidden border border-border"
+              >
+                <img src={s.dataUrl} alt={s.caption ?? 'Screenshot'} className="w-full h-full object-cover" />
+              </button>
+              <button
+                type="button"
+                onClick={() => removeScreenshot(clientId, event.id, s.id)}
+                className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/60 text-white text-xs leading-none opacity-0 group-hover:opacity-100 transition-opacity"
+                title="Supprimer"
+              >
+                ×
+              </button>
+              <input
+                value={s.caption ?? ''}
+                onChange={(e) => updateScreenshot(clientId, event.id, s.id, { caption: e.target.value })}
+                placeholder="légende"
+                className="mt-1 w-full h-6 px-1.5 text-[10px] border border-border rounded bg-card text-foreground"
+              />
+            </div>
+          ))}
+        </div>
+      )}
+
+      <label className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg border border-border cursor-pointer hover:bg-muted transition-colors">
+        <input type="file" accept="image/*" multiple className="hidden" onChange={(e) => handleFiles(e.target.files)} disabled={uploading} />
+        {uploading ? 'Import…' : '+ Ajouter des screenshots'}
+      </label>
+      {error && <p className="text-xs text-destructive">{error}</p>}
+
+      {lightbox && <ScreenshotLightbox dataUrl={lightbox.dataUrl} caption={lightbox.caption} onClose={() => setLightbox(null)} />}
+    </div>
+  );
+}
+
 // ─── Detail panel — spec du plan | GTM (Monitoring) | dataLayer réel (Dictionnaire) ────
 
 function EventDetailPanel({
@@ -279,6 +367,7 @@ function EventDetailPanel({
 
   const implementedSites = siteIds.filter((id) => chainRow?.containers[id]?.tagPresent);
   const [copied, setCopied] = useState(false);
+  const [lightbox, setLightbox] = useState<{ dataUrl: string; caption?: string } | null>(null);
   const pushSnippet = buildDataLayerPushSnippet(event);
 
   function copySnippet() {
@@ -347,6 +436,24 @@ function EventDetailPanel({
           )}
         </div>
 
+        {event.screenshots.length > 0 && (
+          <div className="px-6 py-4 border-t border-border">
+            <p className="text-xs font-semibold text-muted-fg uppercase tracking-wide mb-2">Screenshots ({event.screenshots.length})</p>
+            <div className="grid grid-cols-4 gap-2">
+              {event.screenshots.map((s) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => setLightbox({ dataUrl: s.dataUrl, caption: s.caption })}
+                  className="block w-full aspect-video rounded-lg overflow-hidden border border-border"
+                >
+                  <img src={s.dataUrl} alt={s.caption ?? 'Screenshot'} className="w-full h-full object-cover" />
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="px-6 py-4 border-t border-border">
           <div className="flex items-center justify-between mb-2">
             <p className="text-xs font-semibold text-muted-fg uppercase tracking-wide">Push dataLayer généré</p>
@@ -362,6 +469,8 @@ function EventDetailPanel({
           </p>
         </div>
       </div>
+
+      {lightbox && <ScreenshotLightbox dataUrl={lightbox.dataUrl} caption={lightbox.caption} onClose={() => setLightbox(null)} />}
     </div>
   );
 }

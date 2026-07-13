@@ -1058,15 +1058,15 @@ export function MonitoringPage() {
     <div className="flex flex-col h-full overflow-hidden">
       {/* Header */}
       <div className="px-6 py-4 border-b shrink-0" style={{ borderColor: 'hsl(220 13% 91%)' }}>
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="flex items-center gap-2">
+        <div className="flex items-start justify-between flex-wrap gap-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
               <h1 className="text-base font-semibold text-foreground">Monitoring — Couverture</h1>
               <InfoTooltip>Compare tags, variables et déclencheurs entre tous tes containers sélectionnés — repère les incohérences (nom différent, entité absente) et planifie des corrections en masse (renommage, synchronisation, nettoyage) publiées en un clic.</InfoTooltip>
             </div>
             <p className="text-xs text-muted-fg mt-0.5">Visualisez la présence de chaque entité · cliquez une ligne pour renommer</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             {allTriggerOpsCount > 0 && (
               <button
                 onClick={() => setShowTriggerOps(true)}

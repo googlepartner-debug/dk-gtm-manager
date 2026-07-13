@@ -11,8 +11,17 @@
   window.__dlMappingActive__ empêche toute double-initialisation si le tag se déclenche
   plusieurs fois (SPA, re-render GTM, etc.).
 
+  MODE LOCAL (2026-07-13, en attendant la Phase B Supabase) — pas d'endpoint réseau : le
+  buffer s'accumule dans localStorage (survit à la navigation entre pages du même site) au
+  lieu d'être envoyé à une Edge Function. Pendant une session d'audit, ouvre la console du
+  site et lance :
+    __dlMappingExport()  → télécharge un fichier JSON à importer dans DK GTM Manager
+                            (page DataLayer Mapping → bouton "Importer un export")
+    __dlMappingClear()   → vide le buffer local pour repartir d'une session propre
+  Quand la Phase B Supabase existe, remplacer flush() par un vrai POST réseau — tout le
+  reste (interception, anonymisation, détection d'anomalies) ne change pas.
+
   Variables GTM à interpoler avant de coller ce tag dans l'éditeur :
-  - {{DL Mapping - Endpoint URL}}  → l'URL de l'Edge Function Supabase (PRD §9)
   - {{DL Mapping - Client ID}}     → identifiant du client (ex: "noviscore")
   - {{Container ID}}               → variable native GTM, sert de siteId (PRD §3)
 -->
@@ -22,9 +31,9 @@
   window.__dlMappingActive__ = true;
 
   // ── Configuration (remplacée par GTM à l'insertion du tag) ──────────────────
-  var ENDPOINT_URL = '{{DL Mapping - Endpoint URL}}';
   var CLIENT_ID = '{{DL Mapping - Client ID}}';
   var SITE_ID = '{{Container ID}}';
+  var STORAGE_KEY = 'dl_mapping_buffer_' + CLIENT_ID + '_' + SITE_ID;
 
   // ── Constantes partagées avec l'app (PRD §5, §14.3) — tenir synchronisées
   //    avec src/features/datalayer-mapping/constants/ga4Events.ts si elles changent ────
@@ -135,28 +144,57 @@
     return out;
   }
 
-  // ── Buffer + flush (batched HTTP, never one request per push — a live site can push
-  //    hundreds of events/minute; a per-event ping would hammer the ingestion endpoint) ──
+  // ── Buffer + flush (batched writes to localStorage, never one write per push — a live
+  //    site can push hundreds of events/minute) ───────────────────────────────────────
   var buffer = [];
   var FLUSH_INTERVAL_MS = 5000;
   var MAX_BUFFER_SIZE = 20;
+  // Safety cap — a long, forgotten audit session (hours of browsing) shouldn't be able to
+  // fill localStorage and start throwing QuotaExceededError on every push.
+  var MAX_STORED_OCCURRENCES = 5000;
 
-  function flush(useBeacon) {
-    if (buffer.length === 0) return;
-    var payload = JSON.stringify({ clientId: CLIENT_ID, siteId: SITE_ID, occurrences: buffer });
-    buffer = [];
-
-    if (useBeacon && navigator.sendBeacon) {
-      navigator.sendBeacon(ENDPOINT_URL, new Blob([payload], { type: 'application/json' }));
-      return;
-    }
+  function readStored() {
     try {
-      fetch(ENDPOINT_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: payload, keepalive: true });
-    } catch (e) { /* best-effort — never block the page on a monitoring failure */ }
+      var raw = window.localStorage.getItem(STORAGE_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) { return []; }
   }
 
-  setInterval(function () { flush(false); }, FLUSH_INTERVAL_MS);
-  window.addEventListener('pagehide', function () { flush(true); });
+  function flush() {
+    if (buffer.length === 0) return;
+    try {
+      var stored = readStored().concat(buffer);
+      if (stored.length > MAX_STORED_OCCURRENCES) stored = stored.slice(stored.length - MAX_STORED_OCCURRENCES);
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(stored));
+      buffer = [];
+    } catch (e) { /* best-effort — localStorage full or unavailable, never block the page */ }
+  }
+
+  setInterval(flush, FLUSH_INTERVAL_MS);
+  window.addEventListener('pagehide', flush);
+
+  // ── Manual export/clear — call from the browser console during a live audit session ──
+  window.__dlMappingExport = function () {
+    flush();
+    var occurrences = readStored();
+    var payload = JSON.stringify({ clientId: CLIENT_ID, siteId: SITE_ID, occurrences: occurrences }, null, 2);
+    var blob = new Blob([payload], { type: 'application/json' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'dl-mapping-' + CLIENT_ID + '-' + SITE_ID + '-' + Date.now() + '.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    console.log('[DL Mapping] Export : ' + occurrences.length + ' occurrence(s) — fichier téléchargé. Importe-le dans DK GTM Manager (page DataLayer Mapping).');
+  };
+
+  window.__dlMappingClear = function () {
+    try { window.localStorage.removeItem(STORAGE_KEY); } catch (e) { /* ignore */ }
+    buffer = [];
+    console.log('[DL Mapping] Buffer local vidé.');
+  };
 
   // ── Processes a single push (PRD §5.4 — atomic, one push at a time, never a merged
   //    snapshot of the whole dataLayer — avoids SPA false positives) ─────────────────
