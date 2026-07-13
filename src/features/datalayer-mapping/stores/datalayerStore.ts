@@ -6,6 +6,10 @@ import type {
 import {
   MOCK_CLIENTS, MOCK_DATALAYER_EVENTS, MOCK_DATALAYER_VARIABLES, MOCK_DICTIONARY, MOCK_DATALAYER_OCCURRENCES,
 } from '../../../data/datalayer-mock';
+import {
+  TEST_CLIENT_ID, TEST_CONTAINER_ID, TEST_DATALAYER_CLIENT, TEST_DATALAYER_EVENTS,
+  TEST_DATALAYER_VARIABLES, TEST_DATALAYER_OCCURRENCES,
+} from '../../../data/test-container-mock';
 import { ALERT_THRESHOLD, MAX_UNIQUE_VALUES, DEFAULT_FUNNEL_STEPS } from '../constants/ga4Events';
 import { routeOccurrences } from '../utils/pageRouter';
 import { importCollectorExport, type CollectorExportPayload, type ImportSummary } from '../utils/importCollectorExport';
@@ -40,6 +44,11 @@ interface DatalayerState extends Persisted {
 
   setActiveClient: (clientId: string | null) => void;
   setActiveSite: (siteId: string | null) => void;
+
+  // Container de test / bac à sable (2026-07-14) — ajoute un client fictif dont le siteId
+  // matche exactement le containerId du container de test GTM (gtm-store.seedTestContainer),
+  // pour que le Plan de tracking recoupe les 3 statuts (Planifié/Implémenté/Vérifié) tout seul.
+  loadTestContainer: () => void;
 
   updateEvent: (id: string, updates: Partial<DatalayerEvent>) => void;
   setEventPriority: (id: string, priority: Priority) => void;
@@ -130,6 +139,18 @@ export const useDatalayerStore = create<DatalayerState>((set, get) => ({
 
   setActiveClient: (clientId) => set({ activeClientId: clientId, activeSiteId: null }),
   setActiveSite: (siteId) => set({ activeSiteId: siteId }),
+
+  loadTestContainer: () => {
+    set((state) => ({
+      clients: [...state.clients.filter((c) => c.clientId !== TEST_CLIENT_ID), TEST_DATALAYER_CLIENT],
+      events: [...state.events.filter((e) => e.clientId !== TEST_CLIENT_ID), ...TEST_DATALAYER_EVENTS],
+      variables: [...state.variables.filter((v) => v.clientId !== TEST_CLIENT_ID), ...TEST_DATALAYER_VARIABLES],
+      occurrences: [...state.occurrences.filter((o) => o.clientId !== TEST_CLIENT_ID), ...TEST_DATALAYER_OCCURRENCES],
+      activeClientId: TEST_CLIENT_ID,
+      activeSiteId: TEST_CONTAINER_ID,
+    }));
+    persist(get().activeProfileId, { clients: get().clients, events: get().events, variables: get().variables, dictionary: get().dictionary, occurrences: get().occurrences, focusEvents: get().focusEvents });
+  },
 
   updateEvent: (id, updates) => {
     set((state) => ({ events: state.events.map((e) => (e.id === id ? { ...e, ...updates } : e)) }));

@@ -8,6 +8,7 @@ import { resizeImageFile } from '../utils/resizeImage';
 import { Badge } from '../../../components/ui/Badge';
 import { Button } from '../../../components/ui/Button';
 import { InfoTooltip } from '../../../components/ui/InfoTooltip';
+import { seedTestContainer } from '../../../lib/testContainerSeed';
 import type {
   TrackingPlanEvent, TrackingPlanParameter, TrackingEventCategory, EventPriority, Platform, ParamType, EventStatus,
 } from '../types/trackingPlan.types';
@@ -555,6 +556,8 @@ export function TrackingPlanPage() {
           >
             {clients.map((c) => <option key={c.clientId} value={c.clientId}>{c.clientName}</option>)}
           </select>
+
+          <Button variant="secondary" size="sm" onClick={() => seedTestContainer()}>Charger un container de test</Button>
 
           {plan && (
             <div className="flex items-center rounded-lg overflow-hidden border border-border">

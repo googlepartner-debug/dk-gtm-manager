@@ -11,7 +11,6 @@ import { EventsPage } from './pages/EventsPage';
 import { HistoryPage } from './pages/HistoryPage';
 import { ContextePage } from './pages/ContextePage';
 import { DataLayerMappingPage } from './features/datalayer-mapping/pages/DataLayerMappingPage';
-import { DatalayerKanbanPage } from './features/datalayer-mapping/pages/DatalayerKanbanPage';
 import { TrackingPlanPage } from './features/tracking-plan/pages/TrackingPlanPage';
 import { useAuthStore } from './store/auth-store';
 import { useProfileStore } from './store/profile-store';
@@ -72,7 +71,7 @@ export default function App() {
           <Route path="history" element={<HistoryPage />} />
           <Route path="contexte" element={<ContextePage />} />
           <Route path="datalayer-mapping" element={<DataLayerMappingPage />} />
-          <Route path="datalayer-kanban" element={<DatalayerKanbanPage />} />
+          <Route path="datalayer-kanban" element={<Navigate to="/dashboard/datalayer-mapping" replace />} />
           <Route path="tracking-plan" element={<TrackingPlanPage />} />
         </Route>
       </Routes>

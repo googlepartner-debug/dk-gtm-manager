@@ -22,6 +22,7 @@ import {
 import { detectRequiredBuiltInVariables } from '../lib/gtm-builtin-variables';
 import type { MonitoringContainerData } from '../data/monitoring-mock';
 import { MONITORING_MOCK } from '../data/monitoring-mock';
+import { TEST_CONTAINER_ID, TEST_MONITORING_CONTAINER } from '../data/test-container-mock';
 import { computeContainerDiff, diffVersions } from '../lib/gtm-diff';
 import { computeEventChain as computeEventChainFn } from '../lib/event-chain';
 import type { EventChainRow } from '../types/gtm';
@@ -182,6 +183,9 @@ interface GTMStore {
   cancelMonitoringScan: () => void;
   clearMonitoringData: () => void;
   loadMockMonitoringData: () => void;
+  // Container de test / bac à sable (2026-07-14) — ajoute un container fictif dédié à la
+  // démo, sans écraser un monitoringData réel déjà scanné (contrairement à loadMockMonitoringData).
+  seedTestContainer: () => void;
 
   // Actions — packages
   loadPackages: () => void;
@@ -1941,6 +1945,10 @@ export const useGTMStore = create<GTMStore>((set, get) => ({
     monitoringData: MONITORING_MOCK,
     eventChainRows: computeEventChainFn(MONITORING_MOCK),
     monitoringError: null,
+  }),
+  seedTestContainer: () => set((state) => {
+    const next = [...state.monitoringData.filter((d) => d.containerId !== TEST_CONTAINER_ID), TEST_MONITORING_CONTAINER];
+    return { monitoringData: next, eventChainRows: computeEventChainFn(next), monitoringError: null };
   }),
 }));
 

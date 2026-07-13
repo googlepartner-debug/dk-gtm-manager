@@ -25,6 +25,9 @@ interface TrackingPlanState {
 
   getPlan: (clientId: string) => TrackingPlan | null;
   createPlan: (clientId: string) => void;
+  // Charge un plan tout fait pour un client donné, sans écraser un plan déjà existant
+  // (potentiellement réel) — utilisé par loadMockPlan et par le seed du container de test.
+  loadPlan: (clientId: string, plan: TrackingPlan) => void;
   // Démo pour itérer sur l'UI/UX en attendant Supabase (2026-07-14) — voir data/tracking-plan-mock.ts
   loadMockPlan: (clientId: string) => void;
 
@@ -65,11 +68,13 @@ export const useTrackingPlanStore = create<TrackingPlanState>((set, get) => ({
     persist(get().activeProfileId, get().plans);
   },
 
-  loadMockPlan: (clientId) => {
+  loadPlan: (clientId, plan) => {
     if (get().plans[clientId]) return; // never overwrite an existing (possibly real) plan
-    set((state) => ({ plans: { ...state.plans, [clientId]: { ...MOCK_TRACKING_PLAN, clientId } } }));
+    set((state) => ({ plans: { ...state.plans, [clientId]: plan } }));
     persist(get().activeProfileId, get().plans);
   },
+
+  loadMockPlan: (clientId) => get().loadPlan(clientId, { ...MOCK_TRACKING_PLAN, clientId }),
 
   addEvent: (clientId, event) => {
     const id = crypto.randomUUID();

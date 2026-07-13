@@ -5,9 +5,12 @@ import { Button } from '../../../components/ui/Button';
 import { GLOSSARY, ALERT_THRESHOLD } from '../constants/ga4Events';
 import { VariableDrillDown } from '../components/VariableDrillDown';
 import { InfoTooltip } from '../../../components/ui/InfoTooltip';
+import { KanbanView } from './DatalayerKanbanPage';
+import { seedTestContainer } from '../../../lib/testContainerSeed';
 import type { Priority, ValidationStatus } from '../types/datalayer.types';
 
 type Tab = 'events' | 'variables' | 'dictionary' | 'alerts';
+type View = 'liste' | 'kanban';
 
 const PRIORITY_STYLE: Record<Priority, { label: string; color: string }> = {
   critical: { label: 'Critique', color: '#ef4444' },
@@ -46,6 +49,7 @@ export function DataLayerMappingPage() {
     importOccurrences,
   } = useDatalayerStore();
 
+  const [view, setView] = useState<View>('liste');
   const [tab, setTab] = useState<Tab>('events');
   const [showGlossary, setShowGlossary] = useState(false);
   const [drillEvent, setDrillEvent] = useState<string | null>(null);
@@ -102,6 +106,7 @@ export function DataLayerMappingPage() {
               Importer un export
             </span>
           </label>
+          <Button variant="secondary" size="sm" onClick={() => seedTestContainer()}>Charger un container de test</Button>
           <Button variant="secondary" size="sm" onClick={() => setShowGlossary(true)}>Glossaire</Button>
         </div>
       </div>
@@ -134,8 +139,23 @@ export function DataLayerMappingPage() {
           <option value="">— Tous les sites —</option>
           {activeClient?.sites.map((s) => <option key={s.siteId} value={s.siteId}>{s.siteName}</option>)}
         </select>
+        <div className="flex items-center gap-1 bg-muted rounded-lg p-1 ml-auto">
+          {(['liste', 'kanban'] as View[]).map((v) => (
+            <button
+              key={v}
+              onClick={() => setView(v)}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${view === v ? 'bg-card text-foreground shadow-sm' : 'text-muted-fg hover:text-foreground'}`}
+            >
+              {v === 'liste' ? 'Vue Liste' : 'Vue Kanban'}
+            </button>
+          ))}
+        </div>
       </div>
 
+      {view === 'kanban' && <KanbanView />}
+
+      {view === 'liste' && (
+      <>
       {/* Tabs */}
       <div className="flex items-center gap-1 border-b border-border mb-5">
         {(['events', 'variables', 'dictionary', 'alerts'] as Tab[]).map((t) => (
@@ -289,6 +309,8 @@ export function DataLayerMappingPage() {
             </tbody>
           </table>
         </div>
+      )}
+      </>
       )}
 
       {showGlossary && (

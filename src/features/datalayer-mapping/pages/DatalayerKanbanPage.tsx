@@ -4,13 +4,12 @@ import { EventKanbanCard } from '../components/EventKanbanCard';
 import { EventDetailDrawer } from '../components/EventDetailDrawer';
 import { KANBAN_GLOBAL_COLUMN, KANBAN_UNCLASSIFIED_COLUMN } from '../types/datalayer.types';
 import { ALERT_THRESHOLD } from '../constants/ga4Events';
-import { InfoTooltip } from '../../../components/ui/InfoTooltip';
 
 type ViewMode = 'master' | 'partner';
 
 // PRD §14.6 — Focus Mode editor: add/remove/reorder the events that compose the funnel,
-// per client (datalayerStore.getFocusEvents/setFocusEvents), no drag-and-drop needed for
-// a handful of sequential steps — up/down buttons are enough.
+// per client (datalayerStore.getFocusEvents/setFocusEvents). Reorder via native HTML5
+// drag-and-drop — no library needed for a handful of sequential steps.
 function FocusModeEditor({
   events,
   onChange,
@@ -22,6 +21,8 @@ function FocusModeEditor({
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [newEvent, setNewEvent] = useState('');
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [overIndex, setOverIndex] = useState<number | null>(null);
 
   useEffect(() => {
     function handler(e: MouseEvent) {
@@ -30,14 +31,6 @@ function FocusModeEditor({
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [onClose]);
-
-  function move(i: number, dir: -1 | 1) {
-    const j = i + dir;
-    if (j < 0 || j >= events.length) return;
-    const next = [...events];
-    [next[i], next[j]] = [next[j], next[i]];
-    onChange(next);
-  }
 
   function remove(i: number) {
     onChange(events.filter((_, idx) => idx !== i));
@@ -50,6 +43,16 @@ function FocusModeEditor({
     setNewEvent('');
   }
 
+  function handleDrop(dropIndex: number) {
+    if (dragIndex === null || dragIndex === dropIndex) { setDragIndex(null); setOverIndex(null); return; }
+    const next = [...events];
+    const [moved] = next.splice(dragIndex, 1);
+    next.splice(dropIndex, 0, moved);
+    onChange(next);
+    setDragIndex(null);
+    setOverIndex(null);
+  }
+
   return (
     <div
       ref={ref}
@@ -59,10 +62,23 @@ function FocusModeEditor({
       <p className="text-xs font-semibold text-foreground">Étapes du funnel (Focus Mode)</p>
       <div className="space-y-1">
         {events.map((name, i) => (
-          <div key={name} className="flex items-center gap-1.5">
+          <div
+            key={name}
+            draggable
+            onDragStart={() => setDragIndex(i)}
+            onDragOver={(e) => { e.preventDefault(); if (overIndex !== i) setOverIndex(i); }}
+            onDrop={(e) => { e.preventDefault(); handleDrop(i); }}
+            onDragEnd={() => { setDragIndex(null); setOverIndex(null); }}
+            className="flex items-center gap-1.5 rounded px-1 -mx-1 transition-colors"
+            style={{
+              opacity: dragIndex === i ? 0.4 : 1,
+              backgroundColor: overIndex === i && dragIndex !== null && dragIndex !== i ? 'hsl(267 100% 59% / 0.08)' : 'transparent',
+              borderTop: overIndex === i && dragIndex !== null && dragIndex !== i ? '2px solid hsl(267 100% 59%)' : '2px solid transparent',
+              cursor: 'grab',
+            }}
+          >
+            <span className="text-muted-fg text-xs shrink-0" title="Glisser pour réordonner">⠿</span>
             <span className="font-mono text-xs text-foreground flex-1 truncate">{name}</span>
-            <button onClick={() => move(i, -1)} disabled={i === 0} className="text-xs text-muted-fg hover:text-foreground disabled:opacity-30 px-1">↑</button>
-            <button onClick={() => move(i, 1)} disabled={i === events.length - 1} className="text-xs text-muted-fg hover:text-foreground disabled:opacity-30 px-1">↓</button>
             <button onClick={() => remove(i)} className="text-xs text-destructive hover:opacity-70 px-1">×</button>
           </div>
         ))}
@@ -116,10 +132,14 @@ function FunnelConnector({ health }: { health: { step: string; pct: number }[] }
   );
 }
 
-export function DatalayerKanbanPage() {
+// Contenu de la vue Kanban, sans header ni sélecteur client/site propres — fusionné dans
+// DataLayerMappingPage (2026-07-14) via un toggle Vue Liste/Vue Kanban : les deux vues
+// tournent sur le même datalayerStore (mêmes events/variables/occurrences), pas la peine
+// de dupliquer le sélecteur ni la page.
+export function KanbanView() {
   const {
-    clients, activeClientId, activeSiteId, setActiveClient, setActiveSite,
-    loadMockData, getKanbanColumnsForSite, getKanbanColumnsAggregated,
+    clients, activeClientId, activeSiteId,
+    getKanbanColumnsForSite, getKanbanColumnsAggregated,
     getVariablesForEvent, getEventCoverage, getFocusEvents, setFocusEvents,
   } = useDatalayerStore();
 
@@ -129,10 +149,6 @@ export function DatalayerKanbanPage() {
   const [focusMode, setFocusMode] = useState(false);
   const [focusEditorOpen, setFocusEditorOpen] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (clients.length === 0) loadMockData();
-  }, [clients.length, loadMockData]);
 
   // PRD §14.4 — selecting a partner site switches the view from Master to Partner.
   useEffect(() => {
@@ -172,37 +188,15 @@ export function DatalayerKanbanPage() {
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-xl font-bold text-foreground">Plan de marquage — vue Kanban</h1>
-            <InfoTooltip>Organise les events par page du parcours plutôt que par nom isolé — Vue Master pour le plan théorique agrégé sur tous les sites, Vue Partenaire pour la réalité d'un site précis. Clique une carte pour le détail, active Focus Mode pour isoler le funnel e-commerce.</InfoTooltip>
-          </div>
-          <p className="text-sm text-muted-fg mt-1">
-            {mode === 'master'
-              ? `Vue Master — plan théorique agrégé sur ${activeClient?.sites.length ?? 0} sites`
-              : `Vue Partenaire — ${activeClient?.sites.find((s) => s.siteId === activeSiteId)?.siteName ?? ''}`}
-          </p>
-        </div>
+        <p className="text-sm text-muted-fg">
+          {mode === 'master'
+            ? `Vue Master — plan théorique agrégé sur ${activeClient?.sites.length ?? 0} sites`
+            : `Vue Partenaire — ${activeClient?.sites.find((s) => s.siteId === activeSiteId)?.siteName ?? ''}`}
+        </p>
       </div>
 
-      {/* Header controls */}
+      {/* Filtres — le sélecteur client/site est celui de DataLayer Mapping, partagé */}
       <div className="flex items-center gap-3 mb-5 flex-wrap">
-        <select
-          className="h-9 px-3 text-sm border border-border rounded-lg bg-card text-foreground"
-          value={activeClientId ?? ''}
-          onChange={(e) => setActiveClient(e.target.value || null)}
-        >
-          {clients.map((c) => <option key={c.clientId} value={c.clientId}>{c.clientName}</option>)}
-        </select>
-        <select
-          className="h-9 px-3 text-sm border border-border rounded-lg bg-card text-foreground"
-          value={activeSiteId ?? ''}
-          onChange={(e) => setActiveSite(e.target.value || null)}
-        >
-          <option value="">— Vue Master (tous les sites) —</option>
-          {activeClient?.sites.map((s) => <option key={s.siteId} value={s.siteId}>{s.siteName}</option>)}
-        </select>
-
         <div className="ml-auto flex items-center gap-4">
           <label className="flex items-center gap-2 text-sm text-muted-fg cursor-pointer select-none">
             <input type="checkbox" checked={ecommerceOnly} onChange={(e) => setEcommerceOnly(e.target.checked)} className="rounded" />
