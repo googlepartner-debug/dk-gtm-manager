@@ -381,6 +381,7 @@ export function ContainersPage() {
                   <button
                     type="button"
                     onClick={() => removeContainerRename(op.id)}
+                    aria-label="Retirer ce renommage du plan"
                     className="shrink-0 p-1 rounded text-muted-fg hover:text-destructive transition-colors"
                   >
                     <svg width="12" height="12" viewBox="0 0 12 12" fill="none">

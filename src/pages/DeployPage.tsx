@@ -486,6 +486,7 @@ export function DeployPage() {
           <button
             className="text-muted-fg hover:text-foreground transition-colors"
             onClick={() => { setStep('select'); resetDiffs(); }}
+            aria-label="Retour à la sélection du package"
           >
             <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
               <path d="M12 4l-6 6 6 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>

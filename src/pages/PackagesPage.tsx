@@ -92,7 +92,7 @@ function PackageEditor({ pkg, onBack }: { pkg: DeploymentPackage; onBack: () => 
     <div className="max-w-3xl">
       {/* Header */}
       <div className="mb-6 flex items-center gap-3">
-        <button className="text-muted-fg hover:text-foreground transition-colors" onClick={onBack}>
+        <button className="text-muted-fg hover:text-foreground transition-colors" onClick={onBack} aria-label="Retour à la liste des packages">
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
             <path d="M12 4l-6 6 6 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
@@ -436,7 +436,7 @@ export function PackagesPage() {
                 <div className="text-sm font-semibold text-foreground">Créer depuis un template</div>
                 <div className="text-xs text-muted-fg mt-0.5">Package pré-configuré, modifiable après création</div>
               </div>
-              <button onClick={() => setShowTemplates(false)} className="w-7 h-7 flex items-center justify-center rounded-lg text-muted-fg hover:bg-muted hover:text-foreground transition-colors">
+              <button onClick={() => setShowTemplates(false)} aria-label="Fermer" className="w-7 h-7 flex items-center justify-center rounded-lg text-muted-fg hover:bg-muted hover:text-foreground transition-colors">
                 <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 2l10 10M12 2L2 12" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round"/></svg>
               </button>
             </div>

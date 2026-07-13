@@ -113,7 +113,7 @@ export function EntityDrawer({ kind, entity, availableTriggers = [], onSave, onC
 
         {/* Header */}
         <div className="flex items-center gap-3 px-5 py-4 border-b border-border shrink-0">
-          <button onClick={onClose} className="text-muted-fg hover:text-foreground hover:bg-muted rounded-lg p-1 -m-1 transition-colors shrink-0">
+          <button onClick={onClose} aria-label="Fermer" className="text-muted-fg hover:text-foreground hover:bg-muted rounded-lg p-1 -m-1 transition-colors shrink-0">
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
               <path d="M11 4l-5 5 5 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>

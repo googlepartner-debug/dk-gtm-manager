@@ -374,7 +374,7 @@ function EventNameFilter({
           className="w-full h-8 pl-3 pr-7 text-xs font-mono border border-border rounded-lg bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-fg/50"
         />
         {query && (
-          <button onClick={handleClear} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-muted-fg hover:text-foreground hover:bg-muted rounded-full p-1 transition-colors">
+          <button onClick={handleClear} aria-label="Effacer le filtre" className="absolute right-1.5 top-1/2 -translate-y-1/2 text-muted-fg hover:text-foreground hover:bg-muted rounded-full p-1 transition-colors">
             <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
               <path d="M2 2l6 6M8 2l-6 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
             </svg>

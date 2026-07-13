@@ -4,6 +4,12 @@ Démarré le 2026-07-14 à la demande de Ron : un vrai passage dédié par page 
 
 Méthode par page : audit heuristique (hiérarchie visuelle, densité d'info, action principale vs secondaire, états vides/erreur, accessibilité) → liste de points concrets → Ron choisit lesquels traiter → implémentation + vérification Playwright.
 
+**Méthode renforcée depuis le 2026-07-14 (suite)** : le skill `ui-ux-pro-max` (déjà installé dans `.claude/skills/ui-ux-pro-max/`, CLI Python `scripts/search.py`) est utilisé pour chaque page comme grille de relecture systématique — checklist de 99 règles UX priorisées (accessibilité, touch/interaction, layout responsive, typographie/couleur, animation, formulaires, navigation, charts). Les 4 pages déjà auditées (Containers/Packages/Déployer/Monitoring) ont été repassées avec cette grille en plus de l'audit heuristique initial. Important : le skill propose aussi des recommandations génériques de palette/typographie (`--design-system`) — **non utilisées telles quelles**, la charte DK (violet `hsl(267 100% 59%)`, jaune, prune, cf. `CLAUDE.md`) reste la référence ; seule la partie UX/accessibilité/interaction du skill s'applique.
+
+## Passe accessibilité transversale (2026-07-14, via agent Explore + skill ui-ux-pro-max)
+
+Règle "ARIA Labels" (sévérité High dans la checklist du skill) : tout élément interactif dont le seul contenu visible est une icône SVG doit avoir un `aria-label`, sinon il est invisible pour un lecteur d'écran. Un agent a scanné les 4 pages déjà auditées + leurs composants directs (Header, Sidebar, BulkRenameModal, EntityDrawer, DistributionTab, DiffView, GA4CoverageMatrix) — 9 boutons icône-seule trouvés sans `aria-label` (dont 1 faux positif écarté après vérification manuelle : le bouton "Proposer une amélioration" de la sidebar a bien un texte visible, l'agent avait lu seulement le bloc SVG). Un 9ème trouvé manuellement en plus (bouton retour de `PackagesPage.tsx` `PackageEditor`, pas détecté par l'agent). Total : 9 vrais correctifs appliqués (fermer modale/drawer ×5, retour ×2, retirer un renommage ×1, effacer un filtre ×1), tous avec un libellé français cohérent avec le reste de l'app. Vérifié via Playwright que le bouton de fermeture de la modale "Depuis un template" expose bien un nom accessible "Fermer".
+
 ## Containers — fait (2026-07-14)
 
 Points traités (Ron a choisi "tout") :

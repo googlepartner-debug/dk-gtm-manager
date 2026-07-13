@@ -959,6 +959,7 @@ export function DistributionTab({ containers }: { containers: MonitoringContaine
             <button
               type="button"
               onClick={() => setFullscreenContainerId(null)}
+              aria-label="Fermer la vue plein écran"
               className="p-1.5 rounded-lg text-muted-fg hover:text-foreground hover:bg-card transition-colors"
             >
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 3l10 10M13 3L3 13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
@@ -1000,7 +1001,7 @@ export function DistributionTab({ containers }: { containers: MonitoringContaine
                 <div className="text-sm font-bold text-foreground truncate">{detailNode.cfg.tagName}</div>
                 <div className="text-xs text-muted-fg mt-0.5">{detailNode.containerName}</div>
               </div>
-              <button type="button" onClick={() => setDetailNode(null)} className="p-1 rounded text-muted-fg hover:text-foreground shrink-0">
+              <button type="button" onClick={() => setDetailNode(null)} aria-label="Fermer" className="p-1 rounded text-muted-fg hover:text-foreground shrink-0">
                 <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 2l10 10M12 2L2 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
               </button>
             </div>
