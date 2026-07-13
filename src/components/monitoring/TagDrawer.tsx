@@ -173,15 +173,11 @@ function computeSyncDiff(
 function SyncPlanView({
   infos,
   containers,
-  rowKey,
-  category,
   onPlan,
   onBack,
 }: {
   infos: ContainerTriggerInfo[];
   containers: MonitoringContainerData[];
-  rowKey: string;
-  category: string;
   onPlan: (steps: import('../../types/gtm').TriggerOpStep[], refContainerId: string, refContainerName: string) => void;
   onBack: () => void;
 }) {
@@ -199,7 +195,6 @@ function SyncPlanView({
     setSelected(new Set(diffs.filter((d) => d.status === 'needs-sync').map((d) => d.containerId)));
   }, [refId]);
 
-  const refInfo = infos.find((i) => i.containerId === refId);
   const needsSync = diffs.filter((d) => d.status === 'needs-sync');
   const selectedCount = needsSync.filter((d) => selected.has(d.containerId)).length;
 
@@ -385,7 +380,6 @@ function TriggersTab({
   tagRowKey,
   containers,
   onRemove,
-  onCancelOp,
   onSync,
 }: {
   infos: ContainerTriggerInfo[];
@@ -394,7 +388,6 @@ function TriggersTab({
   tagRowKey: string;
   containers: MonitoringContainerData[];
   onRemove: (containerId: string, containerName: string, publicId: string, trigger: TriggerEntry, isLast: boolean) => void;
-  onCancelOp: (opId: string) => void;
   onSync: () => void;
 }) {
   return (
@@ -745,7 +738,7 @@ export function TagDrawer({
   const [activeTab, setActiveTab] = useState<DrawerTab>(initialTab);
   const [removeConfirm, setRemoveConfirm] = useState<RemoveConfirm | null>(null);
   const [syncMode, setSyncMode] = useState(false);
-  const { pendingTriggerOps, addTriggerOp, removeTriggerOp } = useGTMStore();
+  const { pendingTriggerOps, addTriggerOp } = useGTMStore();
 
   const triggerInfos = useMemo(() => buildTriggerInfo(containers, cells), [containers, cells]);
   const consistent = triggersConsistent(triggerInfos);
@@ -851,8 +844,6 @@ export function TagDrawer({
           <SyncPlanView
             infos={triggerInfos}
             containers={containers}
-            rowKey={rowKey}
-            category={category}
             onPlan={(steps, refContainerId, refContainerName) => {
               addTriggerOp({
                 kind: 'sync',
@@ -874,7 +865,6 @@ export function TagDrawer({
             tagRowKey={rowKey}
             containers={containers}
             onRemove={handleRemove}
-            onCancelOp={removeTriggerOp}
             onSync={() => setSyncMode(true)}
           />
         ) : (

@@ -1,0 +1,207 @@
+<!--
+  DataLayer Mapping — Collecteur (PRD §9, §14.7)
+
+  À déployer comme tag GTM de type "HTML personnalisé" (Custom HTML), PAS comme Custom Template
+  Sandboxed JS — le Sandboxed JS ne peut pas intercepter dataLayer.push() de façon vivante
+  (copyFromWindow renvoie une copie, callInWindow ne peut pas injecter une fonction du bac à
+  sable comme méthode native d'un objet de la page). Ce tag tourne en JS classique, dans le vrai
+  contexte de la page — c'est la seule façon réelle de faire ce qu'on veut faire ici.
+
+  Déclencheur recommandé : "All Pages" / "Initialization", une seule fois par page. Le flag
+  window.__dlMappingActive__ empêche toute double-initialisation si le tag se déclenche
+  plusieurs fois (SPA, re-render GTM, etc.).
+
+  Variables GTM à interpoler avant de coller ce tag dans l'éditeur :
+  - {{DL Mapping - Endpoint URL}}  → l'URL de l'Edge Function Supabase (PRD §9)
+  - {{DL Mapping - Client ID}}     → identifiant du client (ex: "noviscore")
+  - {{Container ID}}               → variable native GTM, sert de siteId (PRD §3)
+-->
+<script>
+(function () {
+  if (window.__dlMappingActive__) return;
+  window.__dlMappingActive__ = true;
+
+  // ── Configuration (remplacée par GTM à l'insertion du tag) ──────────────────
+  var ENDPOINT_URL = '{{DL Mapping - Endpoint URL}}';
+  var CLIENT_ID = '{{DL Mapping - Client ID}}';
+  var SITE_ID = '{{Container ID}}';
+
+  // ── Constantes partagées avec l'app (PRD §5, §14.3) — tenir synchronisées
+  //    avec src/features/datalayer-mapping/constants/ga4Events.ts si elles changent ────
+  var SYSTEM_EVENT_PATTERNS = [/^gtm\./i, /^gtm_/i, /cookie/i];
+  var GA4_NUMERIC_KEYS = ['value', 'price', 'shipping', 'tax'];
+  var GA4_CURRENCY_KEY = 'currency';
+  var ISO_4217_RE = /^[A-Z]{3}$/;
+  var SENSITIVE_KEYWORDS = {
+    email: ['email', 'mail', 'courriel', 'e-mail'],
+    phone: ['phone', 'tel', 'mobile', 'portable', 'telephone', 'gsm'],
+    firstname: ['firstname', 'prenom', 'first_name'],
+    lastname: ['lastname', 'nom', 'last_name', 'surname', 'family_name'],
+    userid: ['user_id', 'userid', 'customer_id'],
+  };
+
+  function isSystemEvent(eventName) {
+    for (var i = 0; i < SYSTEM_EVENT_PATTERNS.length; i++) {
+      if (SYSTEM_EVENT_PATTERNS[i].test(eventName)) return true;
+    }
+    return false;
+  }
+
+  // PRD §14.2 — array occurrences collapse to a wildcard path (items[0], items[1]... → items[*]).
+  function normalizePath(path) {
+    return path.replace(/\[\d+\]/g, '[*]');
+  }
+
+  // PRD §5.3 — combined anonymization: keyword match on the path OR a value-pattern match,
+  // checked on every leaf regardless of whether its name looked suspicious.
+  function anonymizeValue(path, value) {
+    if (typeof value !== 'string' || value === '') return value;
+    var lowerPath = path.toLowerCase();
+
+    for (var type in SENSITIVE_KEYWORDS) {
+      var keywords = SENSITIVE_KEYWORDS[type];
+      for (var i = 0; i < keywords.length; i++) {
+        if (lowerPath.indexOf(keywords[i]) !== -1) return anonymizeByType(type, value);
+      }
+    }
+
+    if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return '***@***.***';
+
+    var phoneMatch = value.match(/^(\+\d{2,3}|0\d)[\d\s.-]+$/);
+    if (phoneMatch && value.replace(/[\s.-]/g, '').length >= 10) {
+      var prefix = value.match(/^(\+\d{2,3}|0\d)/);
+      if (prefix) return prefix[0] + '********';
+    }
+
+    return value;
+  }
+
+  function anonymizeByType(type, value) {
+    switch (type) {
+      case 'email': return '***@***.***';
+      case 'phone':
+        var prefix = value.match(/^(\+\d{2,3}|0\d)/);
+        return prefix ? prefix[0] + '********' : '**********';
+      case 'firstname': return '***PRENOM***';
+      case 'lastname': return '***NOM***';
+      case 'userid': return '***UID***';
+      default: return '***';
+    }
+  }
+
+  // PRD §5.1 — GA4 type mismatch (value/price/shipping/tax must be numeric) and invalid currency.
+  function checkGA4Anomalies(key, value) {
+    var anomalies = [];
+    var lastPart = key.split('.').pop().replace(/\[\*\]$/, '');
+    if (GA4_NUMERIC_KEYS.indexOf(lastPart) !== -1 && typeof value === 'string' && value !== '') {
+      anomalies.push('ga4_type_mismatch');
+    }
+    if (lastPart === GA4_CURRENCY_KEY && typeof value === 'string' && value !== '' && !ISO_4217_RE.test(value)) {
+      anomalies.push('invalid_currency');
+    }
+    return anomalies;
+  }
+
+  // Flattens one push into { normalizedPath: anonymizedValue }, depth-first, arrays wildcarded.
+  function flattenAndAnonymize(obj, prefix) {
+    var out = {};
+    function walk(value, rawPath) {
+      if (value === null || typeof value === 'undefined') {
+        out[normalizePath(rawPath)] = value;
+        return;
+      }
+      if (Object.prototype.toString.call(value) === '[object Array]') {
+        if (value.length === 0) { out[normalizePath(rawPath)] = value; return; }
+        for (var i = 0; i < value.length; i++) walk(value[i], rawPath + '[' + i + ']');
+        return;
+      }
+      if (typeof value === 'object') {
+        var keys = [];
+        for (var k in value) if (Object.prototype.hasOwnProperty.call(value, k)) keys.push(k);
+        if (keys.length === 0) { out[normalizePath(rawPath)] = value; return; }
+        for (var j = 0; j < keys.length; j++) {
+          walk(value[keys[j]], rawPath ? rawPath + '.' + keys[j] : keys[j]);
+        }
+        return;
+      }
+      var anonymized = anonymizeValue(rawPath, value);
+      out[normalizePath(rawPath)] = anonymized;
+    }
+    for (var topKey in obj) {
+      if (Object.prototype.hasOwnProperty.call(obj, topKey) && topKey !== 'event') {
+        walk(obj[topKey], prefix ? prefix + '.' + topKey : topKey);
+      }
+    }
+    return out;
+  }
+
+  // ── Buffer + flush (batched HTTP, never one request per push — a live site can push
+  //    hundreds of events/minute; a per-event ping would hammer the ingestion endpoint) ──
+  var buffer = [];
+  var FLUSH_INTERVAL_MS = 5000;
+  var MAX_BUFFER_SIZE = 20;
+
+  function flush(useBeacon) {
+    if (buffer.length === 0) return;
+    var payload = JSON.stringify({ clientId: CLIENT_ID, siteId: SITE_ID, occurrences: buffer });
+    buffer = [];
+
+    if (useBeacon && navigator.sendBeacon) {
+      navigator.sendBeacon(ENDPOINT_URL, new Blob([payload], { type: 'application/json' }));
+      return;
+    }
+    try {
+      fetch(ENDPOINT_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: payload, keepalive: true });
+    } catch (e) { /* best-effort — never block the page on a monitoring failure */ }
+  }
+
+  setInterval(function () { flush(false); }, FLUSH_INTERVAL_MS);
+  window.addEventListener('pagehide', function () { flush(true); });
+
+  // ── Processes a single push (PRD §5.4 — atomic, one push at a time, never a merged
+  //    snapshot of the whole dataLayer — avoids SPA false positives) ─────────────────
+  function processPush(pushObj) {
+    if (!pushObj || typeof pushObj !== 'object') return;
+    var eventName = pushObj.event;
+    if (typeof eventName !== 'string' || isSystemEvent(eventName)) return;
+
+    var flat = flattenAndAnonymize(pushObj, '');
+    var anomalySet = {};
+    for (var path in flat) {
+      var found = checkGA4Anomalies(path, flat[path]);
+      for (var i = 0; i < found.length; i++) anomalySet[found[i]] = true;
+    }
+
+    buffer.push({
+      eventName: eventName,
+      // PRD §14.2/§14.3 — captured raw for the app's pageRouter cascade to classify later;
+      // this tag does not classify, it only records what it saw.
+      pageType: pushObj.page_type || pushObj.pageCategory || undefined,
+      pageLocation: window.location.href,
+      detectedAt: new Date().toISOString(),
+      variablesSnapshot: flat,
+      anomalies: Object.keys(anomalySet),
+    });
+
+    if (buffer.length >= MAX_BUFFER_SIZE) flush(false);
+  }
+
+  // ── Non-destructive interception (real page JS, not Sandboxed) ─────────────────────
+  // Wraps the existing dataLayer.push rather than replacing dataLayer itself, so GTM's own
+  // internal listener keeps working exactly as before — this tag only observes, it never
+  // changes what fires or when.
+  var dataLayer = window.dataLayer = window.dataLayer || [];
+  var originalPush = dataLayer.push;
+  dataLayer.push = function () {
+    for (var i = 0; i < arguments.length; i++) {
+      try { processPush(arguments[i]); } catch (e) { /* never break the site over a monitoring bug */ }
+    }
+    return originalPush.apply(dataLayer, arguments);
+  };
+
+  // Catch anything already in the dataLayer before this tag loaded (SPA hydration, etc.)
+  for (var existing = 0; existing < dataLayer.length; existing++) {
+    try { processPush(dataLayer[existing]); } catch (e) { /* ignore */ }
+  }
+})();
+</script>

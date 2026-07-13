@@ -5,6 +5,7 @@ import { useGTMStore } from '../../store/gtm-store';
 import { Button } from '../ui/Button';
 import { Badge } from '../ui/Badge';
 import type { DiffEntity, EntityStatus } from '../../types/gtm';
+import { friendlyGtmError } from '../../lib/gtm-errors';
 
 const STATUS_LABEL: Record<EntityStatus, string> = {
   new: 'Nouveau', modified: 'Modifié', unchanged: 'Inchangé', removed: 'Supprimé',
@@ -151,7 +152,7 @@ export function VersionDiffFlow({ onDone }: { onDone: () => void }) {
 
       {versionDiffError && (
         <div className="bg-destructive/8 border border-destructive/20 rounded-xl p-4 text-sm text-destructive mb-4">
-          {versionDiffError}
+          {friendlyGtmError(versionDiffError)?.message}
         </div>
       )}
 

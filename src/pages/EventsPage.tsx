@@ -4,6 +4,7 @@ import { computeEventChain, resolveTagEventNames } from '../lib/event-chain';
 import { GA4_OFFICIAL_EVENTS } from '../data/official-params';
 import type { MonitoringContainerData } from '../data/monitoring-mock';
 import type { GTMParameter } from '../types/gtm';
+import { InfoTooltip } from '../components/ui/InfoTooltip';
 
 const GA4_ECOMMERCE_EVENT_NAMES = new Set(GA4_OFFICIAL_EVENTS.map((e) => e.eventName));
 
@@ -478,6 +479,8 @@ export function EventsPage() {
               })}
             </div>
 
+            <InfoTooltip>Vérifie, event par event, si le tag GA4, son déclencheur et ses variables existent bien dans chaque container — clique un event pour voir ses déclencheurs, puis un déclencheur pour voir ses variables.</InfoTooltip>
+
             {isLoadingMonitoring && (
               <span className="text-xs text-muted-fg shrink-0">Scan en cours…</span>
             )}
@@ -534,6 +537,8 @@ export function EventsPage() {
             onClick={loadMockMonitoringData}
             className="text-xs px-3 py-1.5 rounded-lg font-medium transition-colors"
             style={{ backgroundColor: 'hsl(220 20% 93%)', color: 'hsl(220 13% 40%)' }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'hsl(220 20% 87%)'; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'hsl(220 20% 93%)'; }}
           >
             Charger les données de démonstration
           </button>
@@ -550,17 +555,18 @@ export function EventsPage() {
               className="border-b transition-colors"
               style={{ borderColor: 'hsl(220 13% 93%)' }}
             >
-              {/* Event name — clickable row label */}
-              <td className="px-4 py-3 sticky left-0 z-10" style={{ backgroundColor: 'white', borderRight: '1px solid hsl(220 13% 91%)' }}>
-                <button
-                  onClick={() => drillToEvent(row.eventName)}
-                  className="text-sm font-medium text-foreground hover:text-[hsl(213_94%_45%)] transition-colors text-left w-full flex items-center gap-1.5 group"
-                >
+              {/* Event name — whole cell is the click target, not just the text */}
+              <td
+                onClick={() => drillToEvent(row.eventName)}
+                className="px-4 py-3 sticky left-0 z-10 cursor-pointer group"
+                style={{ backgroundColor: 'white', borderRight: '1px solid hsl(220 13% 91%)' }}
+              >
+                <span className="text-sm font-medium text-foreground group-hover:text-[hsl(213_94%_45%)] transition-colors flex items-center gap-1.5">
                   {row.eventName}
                   <svg width="10" height="10" viewBox="0 0 10 10" fill="none" className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0" style={{ color: 'hsl(213 94% 50%)' }}>
                     <path d="M3 8l4-3-4-3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
                   </svg>
-                </button>
+                </span>
               </td>
 
               {/* Coverage */}
@@ -617,17 +623,18 @@ export function EventsPage() {
               className="border-b transition-colors"
               style={{ borderColor: 'hsl(220 13% 93%)' }}
             >
-              {/* Trigger name */}
-              <td className="px-4 py-3 sticky left-0 z-10" style={{ backgroundColor: 'white', borderRight: '1px solid hsl(220 13% 91%)' }}>
-                <button
-                  onClick={() => drillToTrigger(row.triggerName)}
-                  className="text-sm font-medium text-foreground hover:text-[hsl(213_94%_45%)] transition-colors text-left w-full flex items-center gap-1.5 group"
-                >
+              {/* Trigger name — whole cell is the click target */}
+              <td
+                onClick={() => drillToTrigger(row.triggerName)}
+                className="px-4 py-3 sticky left-0 z-10 cursor-pointer group"
+                style={{ backgroundColor: 'white', borderRight: '1px solid hsl(220 13% 91%)' }}
+              >
+                <span className="text-sm font-medium text-foreground group-hover:text-[hsl(213_94%_45%)] transition-colors flex items-center gap-1.5">
                   <span className="truncate">{row.triggerName}</span>
                   <svg width="10" height="10" viewBox="0 0 10 10" fill="none" className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0" style={{ color: 'hsl(213 94% 50%)' }}>
                     <path d="M3 8l4-3-4-3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
                   </svg>
-                </button>
+                </span>
                 <div className="mt-0.5">
                   <span className="text-[10px] font-medium px-1.5 py-0.5 rounded" style={{ backgroundColor: 'hsl(267 60% 93%)', color: 'hsl(267 100% 40%)' }}>
                     {triggerTypeLabel(row.triggerType)}
@@ -704,15 +711,21 @@ export function EventsPage() {
                           <span>Présente</span>
                         </div>
                       ) : (
-                        <button
+                        <div
+                          className="group/absent flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer"
+                          style={{ backgroundColor: 'hsl(0 85% 97%)', color: 'hsl(0 70% 55%)' }}
                           onClick={(e) => openCellActions(e, buildLevel2Actions(row.varName, c))}
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all hover:shadow-sm"
-                          style={{ backgroundColor: 'hsl(0 84% 97%)', color: 'hsl(0 84% 45%)', border: '1px solid hsl(0 84% 85%)' }}
                           title="Copier cette variable depuis un autre container"
                         >
-                          <span>✗</span>
-                          <span>Manquante</span>
-                        </button>
+                          <svg className="group-hover/absent:hidden" width="10" height="10" viewBox="0 0 10 10" fill="none">
+                            <path d="M2.5 2.5l5 5M7.5 2.5l-5 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                          </svg>
+                          <svg className="hidden group-hover/absent:block" width="10" height="10" viewBox="0 0 10 10" fill="none">
+                            <path d="M5 1v8M1 5h8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                          </svg>
+                          <span className="group-hover/absent:hidden">Absente</span>
+                          <span className="hidden group-hover/absent:inline">Créer</span>
+                        </div>
                       )}
                     </td>
                   );

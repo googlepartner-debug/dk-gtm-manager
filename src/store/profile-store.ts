@@ -68,6 +68,7 @@ export const useProfileStore = create<ProfileStore>((set, get) => ({
     localStorage.setItem(PROFILES_KEY, JSON.stringify(next));
     try { localStorage.removeItem(`dk_gtm_monitoring_v1_${id}`); } catch { /* ignore */ }
     try { localStorage.removeItem(`dk_gtm_ops_v1_${id}`); } catch { /* ignore */ }
+    try { localStorage.removeItem(`dk_datalayer_mapping_v1_${id}`); } catch { /* ignore */ }
     const nextActiveId = activeProfileId === id ? null : activeProfileId;
     if (activeProfileId === id) localStorage.removeItem(ACTIVE_PROFILE_KEY);
     set({ profiles: next, activeProfileId: nextActiveId });

@@ -245,8 +245,10 @@ export function BulkRenameModal({ account, selectedContainers, onClose }: Props)
                       type="button"
                       onClick={() => insertToken(v.token)}
                       title={v.desc}
-                      className="flex items-center gap-1 px-2 py-1 rounded text-[11px] font-mono transition-colors hover:opacity-80"
+                      className="flex items-center gap-1 px-2 py-1 rounded text-[11px] font-mono transition-colors"
                       style={{ backgroundColor: 'hsl(220 13% 96%)', color: 'hsl(220 13% 35%)', border: '1px solid hsl(220 13% 88%)' }}
+                      onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'hsl(220 13% 90%)'; }}
+                      onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'hsl(220 13% 96%)'; }}
                     >
                       <span style={{ color: 'hsl(267 85% 50%)' }}>{v.token}</span>
                       <span className="font-sans opacity-70">— {v.label}</span>

@@ -116,6 +116,10 @@ export interface DeploymentResult {
   status: 'pending' | 'running' | 'success' | 'error';
   workspaceId?: string;
   versionId?: string;
+  // Live version captured just before publishing this deployment — the version rollback
+  // republishes to undo the deployment. Absent when the container had no live version yet
+  // (first-ever publish) or when publication wasn't auto (nothing to roll back).
+  previousVersionId?: string;
   error?: string;
   steps: DeploymentStep[];
 }
@@ -126,12 +130,25 @@ export interface DeploymentStep {
   detail?: string;
 }
 
+export interface RollbackResult {
+  containerId: string;
+  containerName: string;
+  containerPublicId: string;
+  status: 'pending' | 'running' | 'success' | 'error' | 'skipped';
+  error?: string;
+}
+
 export interface DeploymentRecord {
   id: string;
   packageName: string;
   deployedAt: string;
   accountId: string;
   containers: DeploymentResult[];
+  // Whether this deployment published automatically — rollback is only offered for these,
+  // since manual (unpublished) deployments never touched the live version.
+  autoPublish: boolean;
+  rolledBackAt?: string;
+  rollbackResults?: RollbackResult[];
 }
 
 // ─── Diff ─────────────────────────────────────────────────────────────────────
@@ -158,6 +175,10 @@ export interface ContainerDiff {
   entities: DiffEntity[];
   status: 'idle' | 'loading' | 'ready' | 'error';
   error?: string;
+  // Every trigger live in the target container (name → real GTM triggerId), package or not —
+  // used to resolve a tag's firingTriggerId (stored as trigger names in a package, never IDs)
+  // to this specific container's real trigger IDs at deploy time.
+  existingTriggersByName?: Record<string, string>;
 }
 
 export interface GlobalDiffSummary {
@@ -233,6 +254,24 @@ export interface VariableDuplicationOperation {
   publicId: string;
   variable: GTMVariable; // name/type/parameter — no ID yet
   sourceContainerName: string;
+  status: 'pending' | 'applied' | 'failed';
+  createdAt: string;
+  error?: string;
+}
+
+// ─── Entity creation queue (e.g. from DataLayer Mapping detecting a gap) ───────
+// Unlike duplication, there is no source container — the entities are built from
+// a detection (a real dataLayer variable/event with no GTM counterpart yet).
+
+export interface EntityCreationOperation {
+  id: string;
+  containerId: string;
+  containerName: string;
+  publicId: string;
+  variable: GTMVariable;   // always present — the missing Data Layer Variable
+  trigger?: GTMTrigger;    // created only if no equivalent trigger exists yet
+  tag?: GTMTag;             // created only if requested — firingTriggerId resolved at apply time
+  sourceFeature: string;   // e.g. 'datalayer-mapping' — for display/traceability only
   status: 'pending' | 'applied' | 'failed';
   createdAt: string;
   error?: string;

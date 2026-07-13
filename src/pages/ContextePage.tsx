@@ -1,8 +1,8 @@
 import { useState, useMemo } from 'react';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
+import { InfoTooltip } from '../components/ui/InfoTooltip';
 import { MONITORING_MOCK } from '../data/monitoring-mock';
-import type { GTMTag, GTMVariable, GTMTrigger } from '../types/gtm';
 
 interface MockVersion {
   id: string;
@@ -277,7 +277,10 @@ function ContextePage() {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-4">
-        <h1 className="text-2xl font-bold text-foreground">Contexte GTM</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-foreground">Contexte GTM</h1>
+          <InfoTooltip>Vue d'ensemble d'un container : composition (nombre de tags/variables/déclencheurs par catégorie) et timeline des versions publiées, pour comprendre l'historique avant d'intervenir.</InfoTooltip>
+        </div>
         <p className="text-muted-fg">Analyse des containers et historique des versions</p>
       </div>
 

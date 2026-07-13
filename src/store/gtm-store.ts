@@ -3,6 +3,7 @@ import type {
   GTMAccount, GTMContainer, DeploymentPackage, DeploymentRecord, DeploymentResult,
   ContainerDiff, DiffEntity, GlobalDiffSummary, RenameOperation, TriggerOperation, DeletionOperation,
   ContainerRenameOperation, GTMTag, GTMTrigger, GTMVariable, TagDuplicationOperation, VariableDuplicationOperation,
+  EntityCreationOperation, RollbackResult,
 } from '../types/gtm';
 import { findTagByRowKey } from '../lib/gtm-matrix';
 import { STATIC_ACCOUNTS, STATIC_CONTAINERS } from '../data/gtm-static';
@@ -16,13 +17,15 @@ import {
   getDefaultWorkspace, listWorkspaces, getWorkspaceStatus,
   updateContainer, updateAccount,
   listVersionHeaders, getVersion, type GTMVersionHeader, type GTMVersionContent,
+  listEnabledBuiltInVariables, enableBuiltInVariables,
 } from '../lib/gtm-api';
+import { detectRequiredBuiltInVariables } from '../lib/gtm-builtin-variables';
 import type { MonitoringContainerData } from '../data/monitoring-mock';
 import { MONITORING_MOCK } from '../data/monitoring-mock';
 import { computeContainerDiff, diffVersions } from '../lib/gtm-diff';
 import { computeEventChain as computeEventChainFn } from '../lib/event-chain';
 import type { EventChainRow } from '../types/gtm';
-import { loadPackages, savePackage, deletePackage, loadHistory, saveDeploymentRecord } from '../lib/storage';
+import { loadPackages, savePackage, deletePackage, loadHistory, saveDeploymentRecord, updateDeploymentRecord } from '../lib/storage';
 
 // ─── Storage helpers ──────────────────────────────────────────────────────────
 
@@ -81,6 +84,7 @@ type PersistedOps = {
   pendingContainerRenames: ContainerRenameOperation[];
   pendingTagDuplications: TagDuplicationOperation[];
   pendingVariableDuplications: VariableDuplicationOperation[];
+  pendingEntityCreations: EntityCreationOperation[];
 };
 
 const _persistedMonitoring = tryParse<MonitoringContainerData[]>(
@@ -89,7 +93,7 @@ const _persistedMonitoring = tryParse<MonitoringContainerData[]>(
 
 const _persistedOps = tryParse<PersistedOps>(
   localStorage.getItem(OPS_PERSIST_KEY),
-  { pendingDeletions: [], pendingRenames: [], pendingTriggerOps: [], pendingContainerRenames: [], pendingTagDuplications: [], pendingVariableDuplications: [] },
+  { pendingDeletions: [], pendingRenames: [], pendingTriggerOps: [], pendingContainerRenames: [], pendingTagDuplications: [], pendingVariableDuplications: [], pendingEntityCreations: [] },
 );
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -126,6 +130,11 @@ interface GTMStore {
   // History
   history: DeploymentRecord[];
 
+  // Rollback
+  isRollingBack: boolean;
+  rollbackRecordId: string | null;
+  rollbackResults: RollbackResult[];
+
   // Rename queue
   pendingRenames: RenameOperation[];
 
@@ -143,6 +152,9 @@ interface GTMStore {
 
   // Variable duplication queue
   pendingVariableDuplications: VariableDuplicationOperation[];
+
+  // Entity creation queue (variable + optional trigger + optional tag, no source container)
+  pendingEntityCreations: EntityCreationOperation[];
 
   // Active consultant profile
   activeProfileId: string | null;
@@ -210,6 +222,9 @@ interface GTMStore {
   loadHistory: () => void;
   resetDeployment: () => void;
 
+  // Actions — rollback (republish the version live before a given auto-published deployment)
+  rollback: (token: string, record: DeploymentRecord) => Promise<void>;
+
   // Actions — renames (queued here, published from Déployer via applyContainerQueue)
   addRenames: (ops: Omit<RenameOperation, 'id' | 'status' | 'createdAt'>[]) => void;
   removeRename: (id: string) => void;
@@ -266,6 +281,12 @@ interface GTMStore {
   addVariableDuplication: (op: Omit<VariableDuplicationOperation, 'id' | 'status' | 'createdAt'>) => void;
   removeVariableDuplication: (id: string) => void;
   clearVariableDuplications: () => void;
+
+  // Actions — entity creation queue (no source container — built from an external detection,
+  // e.g. DataLayer Mapping finding a real dataLayer variable with no GTM counterpart)
+  addEntityCreation: (op: Omit<EntityCreationOperation, 'id' | 'status' | 'createdAt'>) => void;
+  removeEntityCreation: (id: string) => void;
+  clearEntityCreations: () => void;
 
   // Self-healing: compares every pending rename/duplication/trigger-removal against the latest
   // scanned monitoringData and auto-marks anything already reflected in reality as 'applied' —
@@ -347,6 +368,10 @@ export const useGTMStore = create<GTMStore>((set, get) => ({
 
   history: loadHistory(),
 
+  isRollingBack: false,
+  rollbackRecordId: null,
+  rollbackResults: [],
+
   activeProfileId: null,
 
   monitoringData: _persistedMonitoring,
@@ -365,6 +390,7 @@ export const useGTMStore = create<GTMStore>((set, get) => ({
   pendingContainerRenames: _persistedOps.pendingContainerRenames,
   pendingTagDuplications: _persistedOps.pendingTagDuplications ?? [],
   pendingVariableDuplications: _persistedOps.pendingVariableDuplications ?? [],
+  pendingEntityCreations: _persistedOps.pendingEntityCreations ?? [],
 
   eventChainRows: computeEventChainFn(_persistedMonitoring),
   computeEventChain: () => {
@@ -674,6 +700,7 @@ export const useGTMStore = create<GTMStore>((set, get) => ({
       status: 'pending',
       steps: [
         { label: 'Créer workspace', status: 'pending' },
+        { label: 'Activer variables natives', status: 'pending' },
         { label: 'Synchroniser les entités (upsert)', status: 'pending' },
         { label: 'Créer version', status: 'pending' },
         ...(autoPublish ? [{ label: 'Publier', status: 'pending' as const }] : []),
@@ -714,29 +741,61 @@ export const useGTMStore = create<GTMStore>((set, get) => ({
       updateResult(i, { status: 'running' });
 
       try {
-        // Step 0: Create workspace
+        // Step 0: Reuse a blank workspace, or create one (avoids hitting the 3-workspace GTM cap)
         updateStep(i, 0, 'running');
-        const ws = await createWorkspace(
+        const wsResult = await resolveBlankWorkspace(
           token, selectedAccountId, container.containerId,
-          `DK Deploy - ${versionName}`, 'Déployé via DK GTM Manager'
+          `DK Deploy - ${versionName}`
         );
+        if ('error' in wsResult) throw new Error(wsResult.error);
+        const ws = wsResult;
         updateStep(i, 0, 'success', `ws ${ws.workspaceId}`);
 
-        // Step 1: Upsert selected entities
+        // Step 1: Enable built-in variables the package's triggers/tags reference (e.g. {{Click URL}})
+        // but that were never turned on in this container — otherwise the trigger deploys
+        // silently inert (GTM accepts it, it just never fires).
         updateStep(i, 1, 'running');
+        const selectedEntitiesForScan = containerDiff?.entities.filter((e) => e.selected) ?? [];
+        const requiredBuiltIns = detectRequiredBuiltInVariables({
+          tags: selectedEntitiesForScan.filter((e) => e.kind === 'tag').map((e) => e.proposed as GTMTag),
+          variables: selectedEntitiesForScan.filter((e) => e.kind === 'variable').map((e) => e.proposed as GTMVariable),
+          triggers: selectedEntitiesForScan.filter((e) => e.kind === 'trigger').map((e) => e.proposed as GTMTrigger),
+        });
+        if (requiredBuiltIns.size > 0) {
+          const enabled = new Set(await listEnabledBuiltInVariables(token, selectedAccountId, container.containerId, ws.workspaceId));
+          const missing = [...requiredBuiltIns].filter((t) => !enabled.has(t));
+          if (missing.length > 0) {
+            await enableBuiltInVariables(token, selectedAccountId, container.containerId, ws.workspaceId, missing);
+          }
+          updateStep(i, 1, 'success', missing.length > 0 ? `${missing.length} activée(s)` : 'déjà actives');
+        } else {
+          updateStep(i, 1, 'success', 'aucune requise');
+        }
+
+        // Step 2: Upsert selected entities
+        updateStep(i, 2, 'running');
         const selectedEntities = containerDiff?.entities.filter((e) => e.selected) ?? [];
 
         // Sort: triggers → variables → tags (dependencies order)
         const order = { trigger: 0, variable: 1, tag: 2 };
         const sorted = [...selectedEntities].sort((a, b) => order[a.kind] - order[b.kind]);
 
+        // A tag's firingTriggerId is stored as trigger NAMES in a package (never IDs — a package
+        // is portable across containers). Seed with every trigger already live in this container
+        // (touched by the package or not), then keep it updated as triggers get upserted below,
+        // so tags can resolve to this container's own real trigger IDs right before being sent.
+        const triggerNameToId = new Map<string, string>(Object.entries(containerDiff?.existingTriggersByName ?? {}));
+
         let upsertCount = 0;
         for (const entity of sorted) {
           if (entity.kind === 'trigger') {
             if (entity.existingId) {
               await updateTrigger(token, selectedAccountId, container.containerId, ws.workspaceId, entity.existingId, entity.proposed as never);
+              triggerNameToId.set(entity.name, entity.existingId);
             } else {
-              await createTrigger(token, selectedAccountId, container.containerId, ws.workspaceId, entity.proposed as never);
+              const created = await createTrigger(token, selectedAccountId, container.containerId, ws.workspaceId, entity.proposed as never);
+              const createdId = (created as GTMTrigger | null)?.triggerId;
+              if (createdId) triggerNameToId.set(entity.name, createdId);
             }
           } else if (entity.kind === 'variable') {
             if (entity.existingId) {
@@ -745,33 +804,50 @@ export const useGTMStore = create<GTMStore>((set, get) => ({
               await createVariable(token, selectedAccountId, container.containerId, ws.workspaceId, entity.proposed as never);
             }
           } else if (entity.kind === 'tag') {
+            const proposedTag = entity.proposed as GTMTag;
+            const resolvedFiringTriggerId = proposedTag.firingTriggerId?.map((ref) => {
+              const resolved = triggerNameToId.get(ref);
+              if (!resolved) console.warn(`[GTM] Tag "${proposedTag.name}": déclencheur "${ref}" introuvable dans ${container.name}, référence ignorée`);
+              return resolved;
+            }).filter((id): id is string => Boolean(id));
+            const tagToSend = { ...proposedTag, ...(resolvedFiringTriggerId ? { firingTriggerId: resolvedFiringTriggerId } : {}) };
             if (entity.existingId) {
-              await updateTag(token, selectedAccountId, container.containerId, ws.workspaceId, entity.existingId, entity.proposed as never);
+              await updateTag(token, selectedAccountId, container.containerId, ws.workspaceId, entity.existingId, tagToSend as never);
             } else {
-              await createTag(token, selectedAccountId, container.containerId, ws.workspaceId, entity.proposed as never);
+              await createTag(token, selectedAccountId, container.containerId, ws.workspaceId, tagToSend as never);
             }
           }
           upsertCount++;
         }
-        updateStep(i, 1, 'success', `${upsertCount} entité(s)`);
+        updateStep(i, 2, 'success', `${upsertCount} entité(s)`);
 
-        // Step 2: Create version
-        updateStep(i, 2, 'running');
+        // Step 3: Create version
+        updateStep(i, 3, 'running');
         const versionRes = await createVersion(
           token, selectedAccountId, container.containerId, ws.workspaceId,
           versionName, versionDescription ?? `Package: ${pkg.name}`
         );
         const versionId = versionRes.containerVersion?.containerVersionId ?? '';
-        updateStep(i, 2, 'success', `v${versionId}`);
+        updateStep(i, 3, 'success', `v${versionId}`);
 
-        // Step 3: Publish (optional)
+        // Step 4: Publish (optional)
+        let previousVersionId: string | undefined;
         if (autoPublish) {
-          updateStep(i, 3, 'running');
+          updateStep(i, 4, 'running');
+          // Capture what's live right now — BEFORE publishing — so a later rollback knows
+          // which version to republish. Best-effort: a fresh container may have no live
+          // version yet, and if this lookup fails, rollback simply won't be offered for it.
+          try {
+            const live = await getLiveVersion(token, selectedAccountId, container.containerId);
+            previousVersionId = live?.containerVersionId;
+          } catch {
+            previousVersionId = undefined;
+          }
           await publishVersion(token, selectedAccountId, container.containerId, versionId);
-          updateStep(i, 3, 'success');
+          updateStep(i, 4, 'success');
         }
 
-        updateResult(i, { status: 'success', workspaceId: ws.workspaceId, versionId });
+        updateResult(i, { status: 'success', workspaceId: ws.workspaceId, versionId, previousVersionId });
       } catch (err) {
         const errorMsg = String(err);
         set((state) => {
@@ -791,6 +867,7 @@ export const useGTMStore = create<GTMStore>((set, get) => ({
       deployedAt: new Date().toISOString(),
       accountId: selectedAccountId,
       containers: get().deploymentResults,
+      autoPublish,
     };
     saveDeploymentRecord(record);
 
@@ -799,6 +876,54 @@ export const useGTMStore = create<GTMStore>((set, get) => ({
 
   loadHistory: () => set({ history: loadHistory() }),
   resetDeployment: () => set({ deploymentResults: [], deploymentProgress: 0 }),
+
+  // Republishes, per container, the version that was live right before this deployment
+  // published — undoing its effect. Only containers that succeeded AND have a captured
+  // previousVersionId are eligible; others are marked 'skipped' with an explanation.
+  // Isolation matches deploy(): a failing container doesn't block the others.
+  rollback: async (token, record) => {
+    if (!record.autoPublish) return;
+
+    const eligible = record.containers.filter((c) => c.status === 'success');
+    const initial: RollbackResult[] = eligible.map((c) => ({
+      containerId: c.containerId,
+      containerName: c.containerName,
+      containerPublicId: c.containerPublicId,
+      status: c.previousVersionId ? 'pending' : 'skipped',
+      error: c.previousVersionId ? undefined : "Pas de version antérieure enregistrée pour ce container — republiez manuellement une ancienne version depuis GTM.",
+    }));
+
+    set({ isRollingBack: true, rollbackRecordId: record.id, rollbackResults: initial });
+
+    const updateRb = (idx: number, partial: Partial<RollbackResult>) => {
+      set((state) => {
+        const updated = [...state.rollbackResults];
+        updated[idx] = { ...updated[idx], ...partial };
+        return { rollbackResults: updated };
+      });
+    };
+
+    for (let i = 0; i < eligible.length; i++) {
+      const c = eligible[i];
+      if (!c.previousVersionId) continue; // already marked 'skipped' above
+
+      updateRb(i, { status: 'running' });
+      try {
+        await publishVersion(token, record.accountId, c.containerId, c.previousVersionId);
+        updateRb(i, { status: 'success' });
+      } catch (err) {
+        updateRb(i, { status: 'error', error: err instanceof Error ? err.message : String(err) });
+      }
+    }
+
+    const finalResults = get().rollbackResults;
+    updateDeploymentRecord(record.id, {
+      rolledBackAt: new Date().toISOString(),
+      rollbackResults: finalResults,
+    });
+
+    set({ isRollingBack: false, history: loadHistory() });
+  },
 
   addRenames: (ops) => {
     set((state) => {
@@ -898,7 +1023,11 @@ export const useGTMStore = create<GTMStore>((set, get) => ({
 
     try {
       // Step 1: delete entities
-      for (const op of pending) {
+      // Reverse of creation order (tag → variable → trigger) so a tag never
+      // outlives the trigger/variable it depends on mid-deletion (GTM 400s otherwise).
+      const deletionOrder = { tag: 0, variable: 1, trigger: 2 };
+      const orderedPending = [...pending].sort((a, b) => deletionOrder[a.kind] - deletionOrder[b.kind]);
+      for (const op of orderedPending) {
         const workspaceId = wsMap.get(op.containerId);
         if (!workspaceId || !op.entityId) {
           console.warn(`[GTM] Skipping "${op.entityName}" — missing workspaceId or entityId`);
@@ -948,6 +1077,16 @@ export const useGTMStore = create<GTMStore>((set, get) => ({
         };
 
         try {
+          // Capture what's live BEFORE publishing the deletion, so a rollback can restore it —
+          // deletions are the highest-risk action in this tool, so they get the same safety net.
+          let previousVersionId: string | undefined;
+          try {
+            const live = await getLiveVersion(token, selectedAccountId, containerId);
+            previousVersionId = live?.containerVersionId;
+          } catch {
+            previousVersionId = undefined;
+          }
+
           const versionRes = await createVersion(token, selectedAccountId, containerId, workspaceId, versionName, description);
           const versionId = versionRes.containerVersion?.containerVersionId;
           result.steps[1].status = 'success';
@@ -962,6 +1101,7 @@ export const useGTMStore = create<GTMStore>((set, get) => ({
             await publishVersion(token, selectedAccountId, containerId, versionId);
             result.steps[2].status = 'success';
             result.status = 'success';
+            result.previousVersionId = previousVersionId;
           }
         } catch (err) {
           const errMsg = err instanceof Error ? err.message : String(err);
@@ -988,6 +1128,7 @@ export const useGTMStore = create<GTMStore>((set, get) => ({
           deployedAt: new Date().toISOString(),
           accountId: selectedAccountId,
           containers: deployResults,
+          autoPublish: true,
         });
         set({ history: loadHistory() });
       }
@@ -1083,6 +1224,16 @@ export const useGTMStore = create<GTMStore>((set, get) => ({
     const recordName = label ?? `Publication — ${versionName}`;
 
     try {
+      // Same safety net as deploy()/applyDeletions(): capture what's live before we publish
+      // over it, so a rollback from Historique can restore it.
+      let previousVersionId: string | undefined;
+      try {
+        const live = await getLiveVersion(token, selectedAccountId, containerId);
+        previousVersionId = live?.containerVersionId;
+      } catch {
+        previousVersionId = undefined;
+      }
+
       const versionRes = await createVersion(token, selectedAccountId, containerId, workspaceId, versionName, description);
       const versionId = versionRes.containerVersion?.containerVersionId;
       result.steps[0].status = 'success';
@@ -1093,7 +1244,7 @@ export const useGTMStore = create<GTMStore>((set, get) => ({
         result.error = 'Aucun versionId retourné par GTM';
         saveDeploymentRecord({
           id: crypto.randomUUID(), packageName: recordName, deployedAt: new Date().toISOString(),
-          accountId: selectedAccountId, containers: [result],
+          accountId: selectedAccountId, containers: [result], autoPublish: true,
         });
         set({ history: loadHistory(), applyPublishErrors: [{ containerName: meta.containerName, error: result.error }] });
         return { success: false, error: result.error };
@@ -1103,10 +1254,11 @@ export const useGTMStore = create<GTMStore>((set, get) => ({
       await publishVersion(token, selectedAccountId, containerId, versionId);
       result.steps[1].status = 'success';
       result.status = 'success';
+      result.previousVersionId = previousVersionId;
 
       saveDeploymentRecord({
         id: crypto.randomUUID(), packageName: recordName, deployedAt: new Date().toISOString(),
-        accountId: selectedAccountId, containers: [result],
+        accountId: selectedAccountId, containers: [result], autoPublish: true,
       });
       set({ history: loadHistory() });
       return { success: true };
@@ -1122,7 +1274,7 @@ export const useGTMStore = create<GTMStore>((set, get) => ({
       result.error = errMsg;
       saveDeploymentRecord({
         id: crypto.randomUUID(), packageName: recordName, deployedAt: new Date().toISOString(),
-        accountId: selectedAccountId, containers: [result],
+        accountId: selectedAccountId, containers: [result], autoPublish: true,
       });
       set({ history: loadHistory(), applyPublishErrors: [{ containerName: meta.containerName, error: errMsg }] });
       return { success: false, error: errMsg };
@@ -1179,8 +1331,29 @@ export const useGTMStore = create<GTMStore>((set, get) => ({
 
   clearVariableDuplications: () => set({ pendingVariableDuplications: [] }),
 
+  addEntityCreation: (op) => {
+    set((state) => {
+      const isDuplicate = state.pendingEntityCreations.some((existing) =>
+        existing.status === 'pending' && existing.containerId === op.containerId && existing.variable.name === op.variable.name,
+      );
+      if (isDuplicate) return state;
+      const newOp: EntityCreationOperation = {
+        ...op,
+        id: crypto.randomUUID(),
+        status: 'pending',
+        createdAt: new Date().toISOString(),
+      };
+      return { pendingEntityCreations: [...state.pendingEntityCreations, newOp] };
+    });
+  },
+
+  removeEntityCreation: (id) =>
+    set((state) => ({ pendingEntityCreations: state.pendingEntityCreations.filter((op) => op.id !== id) })),
+
+  clearEntityCreations: () => set({ pendingEntityCreations: [] }),
+
   reconcilePendingOps: () => {
-    const { monitoringData, pendingRenames, pendingTagDuplications, pendingVariableDuplications, pendingTriggerOps } = get();
+    const { monitoringData, pendingRenames, pendingTagDuplications, pendingVariableDuplications, pendingTriggerOps, pendingEntityCreations } = get();
     if (monitoringData.length === 0) return;
 
     const dataByContainer = new Map(monitoringData.map((d) => [d.containerId, d]));
@@ -1239,32 +1412,46 @@ export const useGTMStore = create<GTMStore>((set, get) => ({
       return op;
     });
 
-    if (renamesChanged || tagDupsChanged || varDupsChanged || triggerOpsChanged) {
+    // Entity creations are done once the variable exists — trigger/tag are secondary to that check
+    // (a variable created without its planned trigger/tag would need manual review, not silent success).
+    let entityCreationsChanged = false;
+    const nextEntityCreations = pendingEntityCreations.map((op) => {
+      if (op.status !== 'pending') return op;
+      const meta = dataByContainer.get(op.containerId);
+      if (!meta) return op;
+      const alreadyDone = meta.variables.some((v) => v.name === op.variable.name);
+      if (alreadyDone) { entityCreationsChanged = true; return { ...op, status: 'applied' as const }; }
+      return op;
+    });
+
+    if (renamesChanged || tagDupsChanged || varDupsChanged || triggerOpsChanged || entityCreationsChanged) {
       set({
         pendingRenames: nextRenames,
         pendingTagDuplications: nextTagDups,
         pendingVariableDuplications: nextVarDups,
         pendingTriggerOps: nextTriggerOps,
+        pendingEntityCreations: nextEntityCreations,
       });
     }
   },
 
   isApplyingContainerQueue: false,
   applyContainerQueue: async (token, containerId, { versionName, description }) => {
-    const { selectedAccountId, monitoringData, pendingRenames, pendingTriggerOps, pendingTagDuplications, pendingVariableDuplications } = get();
+    const { selectedAccountId, monitoringData, pendingRenames, pendingTriggerOps, pendingTagDuplications, pendingVariableDuplications, pendingEntityCreations } = get();
     const meta = monitoringData.find((d) => d.containerId === containerId);
     if (!selectedAccountId || !meta) return { success: false, error: 'Container introuvable dans les données scannées' };
 
     const renameOps = pendingRenames.filter((r) => r.status === 'pending' && r.containerId === containerId);
     const dupOps = pendingTagDuplications.filter((d) => d.status === 'pending' && d.containerId === containerId);
     const varDupOps = pendingVariableDuplications.filter((d) => d.status === 'pending' && d.containerId === containerId);
+    const creationOps = pendingEntityCreations.filter((c) => c.status === 'pending' && c.containerId === containerId);
     const triggerWorkItems = pendingTriggerOps.flatMap((op) =>
       op.status === 'pending'
         ? op.steps.filter((s) => s.containerId === containerId).map((step) => ({ opId: op.id, step }))
         : [],
     );
 
-    if (renameOps.length === 0 && dupOps.length === 0 && varDupOps.length === 0 && triggerWorkItems.length === 0) {
+    if (renameOps.length === 0 && dupOps.length === 0 && varDupOps.length === 0 && creationOps.length === 0 && triggerWorkItems.length === 0) {
       return { success: false, error: 'Aucune modification en attente pour ce container' };
     }
 
@@ -1432,6 +1619,49 @@ export const useGTMStore = create<GTMStore>((set, get) => ({
         } catch (err) {
           const errMsg = err instanceof Error ? err.message : String(err);
           set((state) => ({ pendingVariableDuplications: state.pendingVariableDuplications.map((d) => d.id === dup.id ? { ...d, status: 'failed' as const, error: errMsg } : d) }));
+        }
+      }
+
+      // 5. Entity creations (variable + optional trigger + optional tag, no source container —
+      // e.g. from DataLayer Mapping detecting a gap). Same built-in-variable activation as deploy(),
+      // missing here until now — this path went straight to create* calls with no such check.
+      if (creationOps.length > 0) {
+        const requiredBuiltIns = detectRequiredBuiltInVariables({
+          tags: creationOps.flatMap((c) => c.tag ? [c.tag] : []),
+          variables: creationOps.map((c) => c.variable),
+          triggers: creationOps.flatMap((c) => c.trigger ? [c.trigger] : []),
+        });
+        if (requiredBuiltIns.size > 0) {
+          const enabled = new Set(await listEnabledBuiltInVariables(token, selectedAccountId, containerId, workspaceId));
+          const missing = [...requiredBuiltIns].filter((t) => !enabled.has(t));
+          if (missing.length > 0) await enableBuiltInVariables(token, selectedAccountId, containerId, workspaceId, missing);
+        }
+
+        for (const creation of creationOps) {
+          totalCount++;
+          try {
+            // Variable → trigger → tag as one dependent sequence, not 3 independent queues —
+            // the tag (if any) needs the trigger's real ID, not a name or another container's ID.
+            await createVariable(token, selectedAccountId, containerId, workspaceId, creation.variable as never);
+
+            let triggerId: string | undefined;
+            if (creation.trigger) {
+              const createdTr = (await createTrigger(token, selectedAccountId, containerId, workspaceId, creation.trigger as never)) as { triggerId?: string };
+              triggerId = createdTr.triggerId;
+              if (!triggerId) throw new Error(`Trigger "${creation.trigger.name}" créé mais sans ID retourné — tag annulé`);
+            }
+
+            if (creation.tag) {
+              const tagPayload: GTMTag = { ...creation.tag, ...(triggerId ? { firingTriggerId: [triggerId] } : {}) };
+              await createTag(token, selectedAccountId, containerId, workspaceId, tagPayload as never);
+            }
+
+            okCount++;
+            set((state) => ({ pendingEntityCreations: state.pendingEntityCreations.map((c) => c.id === creation.id ? { ...c, status: 'applied' as const } : c) }));
+          } catch (err) {
+            const errMsg = err instanceof Error ? err.message : String(err);
+            set((state) => ({ pendingEntityCreations: state.pendingEntityCreations.map((c) => c.id === creation.id ? { ...c, status: 'failed' as const, error: errMsg } : c) }));
+          }
         }
       }
 
@@ -1658,23 +1888,24 @@ export const useGTMStore = create<GTMStore>((set, get) => ({
     }
 
     // ── Load ops queues ───────────────────────────────────────────────────────
+    const emptyOps: PersistedOps = { pendingDeletions: [], pendingRenames: [], pendingTriggerOps: [], pendingContainerRenames: [], pendingTagDuplications: [], pendingVariableDuplications: [], pendingEntityCreations: [] };
     let ops = tryParse<PersistedOps>(
       localStorage.getItem(`${OPS_PERSIST_KEY}_${profileId}`),
-      { pendingDeletions: [], pendingRenames: [], pendingTriggerOps: [], pendingContainerRenames: [], pendingTagDuplications: [], pendingVariableDuplications: [] },
+      emptyOps,
     );
 
     // Same one-shot migration for ops
     const opsEmpty = !ops.pendingDeletions.length && !ops.pendingRenames.length &&
       !ops.pendingTriggerOps.length && !ops.pendingContainerRenames.length && !ops.pendingTagDuplications.length &&
-      !ops.pendingVariableDuplications?.length;
+      !ops.pendingVariableDuplications?.length && !ops.pendingEntityCreations?.length;
     if (opsEmpty) {
       const legacyOps = tryParse<PersistedOps>(
         localStorage.getItem(OPS_PERSIST_KEY),
-        { pendingDeletions: [], pendingRenames: [], pendingTriggerOps: [], pendingContainerRenames: [], pendingTagDuplications: [], pendingVariableDuplications: [] },
+        emptyOps,
       );
       const legacyHasData = legacyOps.pendingDeletions.length || legacyOps.pendingRenames.length ||
         legacyOps.pendingTriggerOps.length || legacyOps.pendingContainerRenames.length || legacyOps.pendingTagDuplications.length ||
-        legacyOps.pendingVariableDuplications?.length;
+        legacyOps.pendingVariableDuplications?.length || legacyOps.pendingEntityCreations?.length;
       if (legacyHasData) {
         ops = legacyOps;
         safeLocalSet(`${OPS_PERSIST_KEY}_${profileId}`, JSON.stringify(legacyOps));
@@ -1692,6 +1923,7 @@ export const useGTMStore = create<GTMStore>((set, get) => ({
       pendingContainerRenames: ops.pendingContainerRenames,
       pendingTagDuplications: ops.pendingTagDuplications ?? [],
       pendingVariableDuplications: ops.pendingVariableDuplications ?? [],
+      pendingEntityCreations: ops.pendingEntityCreations ?? [],
       // Reset transient state
       isLoadingMonitoring: false,
       monitoringError: null,
@@ -1742,7 +1974,8 @@ useGTMStore.subscribe((state, prev) => {
     state.pendingTriggerOps !== prev.pendingTriggerOps ||
     state.pendingContainerRenames !== prev.pendingContainerRenames ||
     state.pendingTagDuplications !== prev.pendingTagDuplications ||
-    state.pendingVariableDuplications !== prev.pendingVariableDuplications
+    state.pendingVariableDuplications !== prev.pendingVariableDuplications ||
+    state.pendingEntityCreations !== prev.pendingEntityCreations
   ) {
     safeLocalSet(`${OPS_PERSIST_KEY}_${profileId}`, JSON.stringify({
       pendingDeletions: state.pendingDeletions,
@@ -1751,6 +1984,7 @@ useGTMStore.subscribe((state, prev) => {
       pendingContainerRenames: state.pendingContainerRenames,
       pendingTagDuplications: state.pendingTagDuplications,
       pendingVariableDuplications: state.pendingVariableDuplications,
+      pendingEntityCreations: state.pendingEntityCreations,
     }));
   }
 });

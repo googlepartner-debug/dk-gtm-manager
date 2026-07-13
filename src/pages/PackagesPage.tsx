@@ -8,6 +8,7 @@ import { VersionDiffFlow } from '../components/packages/VersionDiffFlow';
 import { TAG_TYPES, VARIABLE_TYPES, TRIGGER_TYPES } from '../data/gtm-entity-types';
 import { PACKAGE_TEMPLATES } from '../data/package-templates';
 import type { DeploymentPackage, GTMTag, GTMVariable, GTMTrigger } from '../types/gtm';
+import { InfoTooltip } from '../components/ui/InfoTooltip';
 
 type TabKind = 'tags' | 'variables' | 'triggers';
 type DrawerKind = 'tag' | 'variable' | 'trigger';
@@ -186,7 +187,7 @@ function PackageEditor({ pkg, onBack }: { pkg: DeploymentPackage; onBack: () => 
             </div>
           ) : (
             <div className="space-y-2">
-              {filteredList.map((entity, i) => {
+              {filteredList.map((entity) => {
                 const realIndex = currentList.indexOf(entity);
                 const eventName = (entity as GTMTag).parameter?.find((p) => p.key === 'event_name' || p.key === 'eventName')?.value;
                 return (
@@ -325,7 +326,10 @@ export function PackagesPage() {
     <div className="max-w-3xl">
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-foreground">Packages de déploiement</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-bold text-foreground">Packages de déploiement</h1>
+            <InfoTooltip>Un package regroupe des tags, variables et déclencheurs à déployer ensemble sur plusieurs containers — utile pour propager une config validée (ex. GA4 Ecommerce) sans la recréer à la main container par container. Crée-le ici, déploie-le depuis "Déployer".</InfoTooltip>
+          </div>
           <p className="text-sm text-muted-fg mt-1">Tags, variables et déclencheurs à déployer en batch.</p>
         </div>
         <div className="flex items-center gap-2">

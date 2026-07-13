@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/auth-store';
 import { useGTMStore } from '../store/gtm-store';
@@ -7,6 +7,9 @@ import { Badge } from '../components/ui/Badge';
 import { DiffView } from '../components/diff/DiffView';
 import { GA4CoverageMatrix } from '../components/diff/GA4CoverageMatrix';
 import { PublishingLoader } from '../components/ui/PublishingLoader';
+import { validatePackage } from '../lib/package-validation';
+import { friendlyGtmError } from '../lib/gtm-errors';
+import { InfoTooltip } from '../components/ui/InfoTooltip';
 import type { DeploymentResult, RenameOperation, TriggerOperation, TriggerOpStep, TagDuplicationOperation, VariableDuplicationOperation } from '../types/gtm';
 
 type Step = 'select' | 'diff' | 'progress' | 'done';
@@ -44,7 +47,46 @@ interface ContainerQueueGroup {
   variableDuplications: VariableDuplicationOperation[];
 }
 
-function ContainerQueueCard({ group }: { group: ContainerQueueGroup }) {
+// Describes WHAT kind of change this is, e.g. "Renommage" or "Renommage + Duplication tag" —
+// used as the default version name prefix instead of the generic, meaningless "Déploiement".
+function buildActionPrefix(group: ContainerQueueGroup): string {
+  const parts: string[] = [];
+  if (group.renames.length > 0) parts.push('Renommage');
+  if (group.triggerOps.some(({ op }) => op.kind === 'remove')) parts.push('Retrait déclencheur');
+  if (group.triggerOps.some(({ op }) => op.kind !== 'remove')) parts.push('Synchronisation déclencheur');
+  if (group.duplications.length > 0) parts.push('Duplication tag');
+  if (group.variableDuplications.length > 0) parts.push('Duplication variable');
+  return parts.join(' + ') || 'Mise à jour';
+}
+
+function buildQueueVersionMeta(group: ContainerQueueGroup): { versionName: string; versionDesc: string } {
+  const names = [
+    ...group.renames.map((r) => r.newName),
+    ...group.triggerOps.map((t) => t.op.tagRowKey),
+    ...group.duplications.map((d) => d.tag.name),
+    ...group.variableDuplications.map((d) => d.variable.name),
+  ];
+  const uniqueNames = [...new Set(names)];
+  const namesLabel = uniqueNames.length <= 4 ? uniqueNames.join(', ') : `${uniqueNames.slice(0, 4).join(', ')} +${uniqueNames.length - 4} autre${uniqueNames.length - 4 > 1 ? 's' : ''}`;
+  const versionName = `${buildActionPrefix(group)} — ${namesLabel}`;
+  const lines = [
+    ...group.renames.map((r) => `Renommage : "${r.oldName}" -> "${r.newName}"`),
+    ...group.triggerOps.map(({ op }) => `${op.kind === 'remove' ? 'Retrait déclencheur' : 'Synchronisation déclencheurs'} : ${op.tagRowKey}`),
+    ...group.duplications.map((d) => `Duplication tag : "${d.tag.name}" depuis ${d.sourceContainerName}`),
+    ...group.variableDuplications.map((d) => `Duplication variable : "${d.variable.name}" depuis ${d.sourceContainerName}`),
+  ];
+  return { versionName, versionDesc: lines.join('\n') };
+}
+
+function ContainerQueueCard({
+  group,
+  selected,
+  onToggleSelected,
+}: {
+  group: ContainerQueueGroup;
+  selected: boolean;
+  onToggleSelected: () => void;
+}) {
   const { accessToken } = useAuthStore();
   const { applyContainerQueue, isApplyingContainerQueue } = useGTMStore();
   const [expanded, setExpanded] = useState(false);
@@ -56,22 +98,9 @@ function ContainerQueueCard({ group }: { group: ContainerQueueGroup }) {
   const totalCount = group.renames.length + group.triggerOps.length + group.duplications.length + group.variableDuplications.length;
 
   function openPanel() {
-    const names = [
-      ...group.renames.map((r) => r.newName),
-      ...group.triggerOps.map((t) => t.op.tagRowKey),
-      ...group.duplications.map((d) => d.tag.name),
-      ...group.variableDuplications.map((d) => d.variable.name),
-    ];
-    const uniqueNames = [...new Set(names)];
-    const namesLabel = uniqueNames.length <= 4 ? uniqueNames.join(', ') : `${uniqueNames.slice(0, 4).join(', ')} +${uniqueNames.length - 4} autre${uniqueNames.length - 4 > 1 ? 's' : ''}`;
-    setVersionName(`Déploiement — ${namesLabel}`);
-    const lines = [
-      ...group.renames.map((r) => `Renommage : "${r.oldName}" -> "${r.newName}"`),
-      ...group.triggerOps.map(({ op }) => `${op.kind === 'remove' ? 'Retrait déclencheur' : 'Synchronisation déclencheurs'} : ${op.tagRowKey}`),
-      ...group.duplications.map((d) => `Duplication tag : "${d.tag.name}" depuis ${d.sourceContainerName}`),
-      ...group.variableDuplications.map((d) => `Duplication variable : "${d.variable.name}" depuis ${d.sourceContainerName}`),
-    ];
-    setVersionDesc(lines.join('\n'));
+    const meta = buildQueueVersionMeta(group);
+    setVersionName(meta.versionName);
+    setVersionDesc(meta.versionDesc);
     setResult(null);
     setExpanded(true);
   }
@@ -90,6 +119,13 @@ function ContainerQueueCard({ group }: { group: ContainerQueueGroup }) {
     <div className="bg-card border border-border rounded-xl overflow-hidden">
       <div className="px-4 py-3 border-b border-border flex items-center justify-between">
         <div className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={onToggleSelected}
+            className="w-4 h-4 rounded border-border shrink-0"
+            title="Inclure dans la publication groupée"
+          />
           <span className="font-semibold text-sm text-foreground">{group.containerName}</span>
           <Badge variant="default">{group.publicId}</Badge>
           <span className="text-xs text-muted-fg">{totalCount} modification{totalCount > 1 ? 's' : ''}</span>
@@ -178,8 +214,17 @@ function ContainerQueueCard({ group }: { group: ContainerQueueGroup }) {
   );
 }
 
+interface BulkResult {
+  containerId: string;
+  containerName: string;
+  publicId: string;
+  status: 'pending' | 'running' | 'success' | 'error';
+  error?: string;
+}
+
 function PendingChangesSection() {
-  const { pendingRenames, pendingTriggerOps, pendingTagDuplications, pendingVariableDuplications } = useGTMStore();
+  const { pendingRenames, pendingTriggerOps, pendingTagDuplications, pendingVariableDuplications, applyContainerQueue } = useGTMStore();
+  const { accessToken } = useAuthStore();
 
   const groups = useMemo(() => {
     const map = new Map<string, ContainerQueueGroup>();
@@ -208,15 +253,101 @@ function PendingChangesSection() {
     return [...map.values()];
   }, [pendingRenames, pendingTriggerOps, pendingTagDuplications, pendingVariableDuplications]);
 
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkResults, setBulkResults] = useState<BulkResult[] | null>(null);
+  const [isBulkPublishing, setIsBulkPublishing] = useState(false);
+
+  // Default to "all selected" whenever the set of containers with pending changes changes
+  // (a container appears or gets fully cleared) — the common case is publishing everything.
+  const idsKey = groups.map((g) => g.containerId).sort().join(',');
+  useEffect(() => {
+    setSelectedIds(new Set(groups.map((g) => g.containerId)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [idsKey]);
+
   if (groups.length === 0) return null;
+
+  function toggleSelected(containerId: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(containerId)) next.delete(containerId); else next.add(containerId);
+      return next;
+    });
+  }
+
+  // Each container publishes to its own GTM version — GTM has no notion of a version
+  // spanning multiple containers — so "publier en même temps" means sequential, isolated
+  // publishes (one container's failure doesn't block the others), same pattern as the
+  // main package deploy(). Auto-generates the version name/description per container;
+  // use the individual "Publier →" button instead if you need to tweak one by hand.
+  async function handleBulkPublish() {
+    const targets = groups.filter((g) => selectedIds.has(g.containerId));
+    if (targets.length === 0 || !accessToken) return;
+
+    setIsBulkPublishing(true);
+    setBulkResults(targets.map((g) => ({ containerId: g.containerId, containerName: g.containerName, publicId: g.publicId, status: 'pending' })));
+
+    for (const g of targets) {
+      setBulkResults((prev) => prev!.map((r) => (r.containerId === g.containerId ? { ...r, status: 'running' } : r)));
+      const meta = buildQueueVersionMeta(g);
+      const res = await applyContainerQueue(accessToken, g.containerId, { versionName: meta.versionName, description: meta.versionDesc });
+      setBulkResults((prev) => prev!.map((r) => (r.containerId === g.containerId ? { ...r, status: res.success ? 'success' : 'error', error: res.error } : r)));
+    }
+
+    setIsBulkPublishing(false);
+  }
+
+  const selectedCount = groups.filter((g) => selectedIds.has(g.containerId)).length;
+  const allSelected = selectedCount === groups.length;
 
   return (
     <div className="mb-6 space-y-3">
-      <h2 className="text-sm font-semibold text-foreground">
-        Modifications en attente
-        <span className="ml-2 text-xs font-normal text-muted-fg">planifiées depuis Monitoring — un container à la fois</span>
-      </h2>
-      {groups.map((g) => <ContainerQueueCard key={g.containerId} group={g} />)}
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <h2 className="text-sm font-semibold text-foreground">
+          Modifications en attente
+          <span className="ml-2 text-xs font-normal text-muted-fg">planifiées depuis Monitoring — {groups.length} container{groups.length > 1 ? 's' : ''}</span>
+        </h2>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setSelectedIds(allSelected ? new Set() : new Set(groups.map((g) => g.containerId)))}
+            className="text-xs text-muted-fg hover:text-foreground transition-colors"
+          >
+            {allSelected ? 'Tout désélectionner' : 'Tout sélectionner'}
+          </button>
+          <Button
+            size="sm"
+            onClick={handleBulkPublish}
+            disabled={!accessToken || selectedCount === 0 || isBulkPublishing}
+            title={!accessToken ? 'Session GTM expirée — reconnecte-toi' : undefined}
+          >
+            Publier {selectedCount > 1 ? `${selectedCount} containers` : selectedCount === 1 ? '1 container' : ''} →
+          </Button>
+        </div>
+      </div>
+
+      {bulkResults && (
+        <div className="bg-card border border-border rounded-xl p-3 space-y-1.5">
+          {bulkResults.map((r) => (
+            <div key={r.containerId} className="flex items-center justify-between text-xs">
+              <div className="flex items-center gap-2">
+                <StepIcon status={r.status} />
+                <span className="text-foreground">{r.containerName}</span>
+                <span className="text-muted-fg">{r.publicId}</span>
+              </div>
+              {r.error && <span className="text-destructive max-w-[280px] truncate">{r.error.slice(0, 100)}</span>}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {groups.map((g) => (
+        <ContainerQueueCard
+          key={g.containerId}
+          group={g}
+          selected={selectedIds.has(g.containerId)}
+          onToggleSelected={() => toggleSelected(g.containerId)}
+        />
+      ))}
     </div>
   );
 }
@@ -244,6 +375,7 @@ export function DeployPage() {
 
   const [versionName, setVersionName] = useState(defaultVersionName);
   const [versionDescription, setVersionDescription] = useState('');
+  const packageWarnings = useMemo(() => (selectedPkg ? validatePackage(selectedPkg) : []), [selectedPkg]);
   const canAnalyse = !!selectedPkg && selectedContainers.length > 0;
   const summary = globalDiffSummary();
   const hasDiff = Object.values(diffs).some((d) => d.status === 'ready');
@@ -325,7 +457,7 @@ export function DeployPage() {
                     <span className={`text-xs ${s.status === 'pending' ? 'text-muted-fg' : 'text-foreground'}`}>{s.label}</span>
                     {s.detail && (
                       <span className={`text-xs font-mono ${s.status === 'error' ? 'text-destructive' : 'text-muted-fg'}`}>
-                        {s.status === 'error' ? s.detail.slice(0, 80) : s.detail}
+                        {s.status === 'error' ? (friendlyGtmError(s.detail)?.message ?? s.detail) : s.detail}
                       </span>
                     )}
                   </div>
@@ -500,7 +632,10 @@ export function DeployPage() {
       <PendingChangesSection />
 
       <div className="mb-6">
-        <h1 className="text-xl font-bold text-foreground">Déployer un package</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-xl font-bold text-foreground">Déployer un package</h1>
+          <InfoTooltip>Compare un package aux containers cibles (diff avant/après), puis publie la nouvelle version — en masse sur plusieurs containers en un clic, avec isolation des erreurs container par container.</InfoTooltip>
+        </div>
         <p className="text-sm text-muted-fg mt-1">Sélectionnez le package et les containers, puis analysez le diff.</p>
       </div>
 
@@ -536,6 +671,21 @@ export function DeployPage() {
               <span><strong className="text-foreground">{selectedPkg.entities.tags.length}</strong> tags</span>
               <span><strong className="text-foreground">{selectedPkg.entities.variables.length}</strong> variables</span>
               <span><strong className="text-foreground">{selectedPkg.entities.triggers.length}</strong> déclencheurs</span>
+            </div>
+          )}
+          {packageWarnings.length > 0 && (
+            <div className="mt-3 bg-warning/10 border border-warning/30 rounded-lg px-3 py-2 space-y-1.5">
+              <p className="text-xs font-semibold text-warning uppercase tracking-wide">
+                {packageWarnings.length} point{packageWarnings.length > 1 ? 's' : ''} à vérifier avant déploiement
+              </p>
+              <ul className="space-y-1">
+                {packageWarnings.map((w, i) => (
+                  <li key={i} className="text-xs text-muted-fg">
+                    <span className="font-medium text-foreground">[{w.entityKind}] {w.entityName}</span>
+                    {' — '}{w.message}
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
         </div>

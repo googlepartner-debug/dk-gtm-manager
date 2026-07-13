@@ -47,3 +47,11 @@ export function saveDeploymentRecord(record: DeploymentRecord) {
   // Keep last 50 records
   localStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(0, 50)));
 }
+
+export function updateDeploymentRecord(id: string, patch: Partial<DeploymentRecord>) {
+  const history = loadHistory();
+  const idx = history.findIndex((r) => r.id === id);
+  if (idx === -1) return;
+  history[idx] = { ...history[idx], ...patch };
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+}

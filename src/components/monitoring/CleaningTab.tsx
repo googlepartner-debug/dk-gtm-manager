@@ -3,6 +3,7 @@ import type { MonitoringContainerData } from '../../data/monitoring-mock';
 import type { GTMTrigger, GTMVariable, GTMParameter } from '../../types/gtm';
 import { useGTMStore } from '../../store/gtm-store';
 import { useAuthStore } from '../../store/auth-store';
+import { friendlyGtmError } from '../../lib/gtm-errors';
 
 // ─── Orphan detection ──────────────────────────────────────────────────────────
 
@@ -77,6 +78,8 @@ export function CleaningTab({ containers }: { containers: MonitoringContainerDat
   const [showConfirm, setShowConfirm] = useState(false);
   const [versionName, setVersionName] = useState('');
   const [versionDesc, setVersionDesc] = useState('');
+  const [confirmText, setConfirmText] = useState('');
+  const CONFIRM_WORD = 'SUPPRIMER';
 
   // Completion notification
   const [notif, setNotif] = useState<string | null>(null);
@@ -87,9 +90,7 @@ export function CleaningTab({ containers }: { containers: MonitoringContainerDat
       const applied = pendingDeletions.filter((op) => op.status === 'applied').length;
       if (applyPublishErrors.length > 0) {
         const names = applyPublishErrors.map((e) => e.containerName).join(', ');
-        // Extract short error (GTM API 400/403 messages are verbose)
-        const firstErr = applyPublishErrors[0].error;
-        const shortErr = firstErr.length > 120 ? firstErr.slice(0, 117) + '...' : firstErr;
+        const shortErr = friendlyGtmError(applyPublishErrors[0].error)?.message ?? applyPublishErrors[0].error;
         setErrorNotif(`Publication échouée sur ${applyPublishErrors.length} container${applyPublishErrors.length > 1 ? 's' : ''} (${names}) — ${shortErr}`);
       } else if (applied > 0) {
         setNotif(`${applied} suppression${applied > 1 ? 's' : ''} appliquée${applied > 1 ? 's' : ''} et publiée${applied > 1 ? 's' : ''}`);
@@ -218,6 +219,7 @@ export function CleaningTab({ containers }: { containers: MonitoringContainerDat
   function openConfirmModal() {
     setVersionName(buildDefaultVersionName());
     setVersionDesc(buildDefaultDescription());
+    setConfirmText('');
     setShowConfirm(true);
   }
 
@@ -314,7 +316,7 @@ export function CleaningTab({ containers }: { containers: MonitoringContainerDat
             style={{ color: 'hsl(220 13% 20%)' }}
           />
           {tagSearch && (
-            <button onClick={() => setTagSearch('')} className="text-muted-fg hover:text-foreground transition-colors text-[10px]">Effacer</button>
+            <button onClick={() => setTagSearch('')} className="text-muted-fg hover:text-foreground hover:bg-muted transition-colors text-[10px] px-1.5 py-0.5 rounded">Effacer</button>
           )}
         </div>
       )}
@@ -444,8 +446,10 @@ export function CleaningTab({ containers }: { containers: MonitoringContainerDat
               <span className="text-muted-fg shrink-0">{op.containerName}</span>
               {op.status === 'pending' ? (
                 <button onClick={() => cancelDeletion(op.id)}
-                  className="text-[10px] px-1.5 py-0.5 rounded transition-colors hover:opacity-70 shrink-0"
-                  style={{ backgroundColor: 'hsl(0 85% 96%)', color: 'hsl(0 65% 50%)' }}>
+                  className="text-[10px] px-1.5 py-0.5 rounded transition-colors shrink-0"
+                  style={{ backgroundColor: 'hsl(0 85% 96%)', color: 'hsl(0 65% 50%)' }}
+                  onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'hsl(0 85% 90%)'; }}
+                  onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'hsl(0 85% 96%)'; }}>
                   Annuler
                 </button>
               ) : (
@@ -459,7 +463,7 @@ export function CleaningTab({ containers }: { containers: MonitoringContainerDat
           {pending.length > 0 && (
             <div className="flex gap-2">
               <button onClick={() => { pending.forEach((op) => cancelDeletion(op.id)); }}
-                className="flex-1 py-1.5 text-xs rounded-lg border text-muted-fg hover:text-foreground"
+                className="flex-1 py-1.5 text-xs rounded-lg border text-muted-fg hover:text-foreground hover:bg-muted transition-colors"
                 style={{ borderColor: 'hsl(220 13% 85%)' }}>
                 Tout annuler
               </button>
@@ -593,6 +597,28 @@ export function CleaningTab({ containers }: { containers: MonitoringContainerDat
                     style={{ borderColor: 'hsl(220 13% 85%)', color: 'hsl(220 13% 15%)' }}
                   />
                 </div>
+
+                {/* Reversibility note */}
+                <div className="rounded-lg px-3 py-2 text-[11px]" style={{ backgroundColor: 'hsl(213 94% 97%)', color: 'hsl(213 60% 30%)' }}>
+                  Après publication, chaque container republié apparaîtra dans l'Historique avec un bouton
+                  <span className="font-semibold"> Annuler le déploiement</span> qui restaure la version qui était en ligne juste avant.
+                </div>
+
+                {/* Type-to-confirm */}
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-medium flex items-center gap-1" style={{ color: 'hsl(220 13% 35%)' }}>
+                    Tape <span className="font-mono font-semibold" style={{ color: 'hsl(0 65% 50%)' }}>{CONFIRM_WORD}</span> pour confirmer la suppression
+                    <span className="px-1.5 py-0.5 rounded text-[10px]" style={{ backgroundColor: 'hsl(0 85% 96%)', color: 'hsl(0 65% 50%)' }}>obligatoire</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={confirmText}
+                    onChange={(e) => setConfirmText(e.target.value)}
+                    placeholder={CONFIRM_WORD}
+                    className="w-full px-3 py-2 rounded-lg border text-xs outline-none transition-all font-mono"
+                    style={{ borderColor: confirmText === CONFIRM_WORD ? 'hsl(142 50% 45%)' : 'hsl(220 13% 85%)', color: 'hsl(220 13% 15%)' }}
+                  />
+                </div>
               </div>
 
               {/* Footer */}
@@ -608,15 +634,19 @@ export function CleaningTab({ containers }: { containers: MonitoringContainerDat
                   Annuler
                 </button>
                 <button
-                  disabled={!versionName.trim()}
+                  disabled={!versionName.trim() || confirmText !== CONFIRM_WORD}
                   onClick={() => {
-                    if (!versionName.trim()) return;
+                    if (!versionName.trim() || confirmText !== CONFIRM_WORD) return;
                     if (!accessToken) { setErrorNotif('Session GTM expirée ou absente — reconnecte-toi puis réessaie.'); return; }
                     setShowConfirm(false);
                     applyDeletions(accessToken, { versionName: versionName.trim(), description: versionDesc.trim() });
                   }}
                   className="px-5 py-2 text-xs font-semibold rounded-xl text-white transition-all"
-                  style={{ backgroundColor: 'hsl(0 70% 50%)', opacity: !versionName.trim() ? 0.45 : 1, cursor: !versionName.trim() ? 'not-allowed' : undefined }}
+                  style={{
+                    backgroundColor: 'hsl(0 70% 50%)',
+                    opacity: (!versionName.trim() || confirmText !== CONFIRM_WORD) ? 0.45 : 1,
+                    cursor: (!versionName.trim() || confirmText !== CONFIRM_WORD) ? 'not-allowed' : undefined,
+                  }}
                 >
                   Supprimer et publier
                 </button>

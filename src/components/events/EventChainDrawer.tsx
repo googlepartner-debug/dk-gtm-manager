@@ -188,7 +188,7 @@ function getAllTagVarRefs(container: MonitoringContainerData, eventName: string)
     VAR_RE.lastIndex = 0;
     while ((m = VAR_RE.exec(val)) !== null) refs.push(m[1]);
   }
-  function scanParams(params: typeof tag.parameter) {
+  function scanParams(params: NonNullable<typeof tag>['parameter']) {
     for (const p of params ?? []) {
       if (p.value) scan(p.value);
       if (p.list) scanParams(p.list);

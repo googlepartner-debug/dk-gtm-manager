@@ -154,6 +154,40 @@ export async function getWorkspaceStatus(
   );
 }
 
+// ─── Built-in variables ───────────────────────────────────────────────────────
+// Native GTM variables (Click URL, Form ID, Page Path...) are OFF by default on a
+// fresh container. A trigger referencing one via {{Click URL}} deploys successfully
+// but silently never fires if the target container never enabled it.
+
+export async function listEnabledBuiltInVariables(
+  token: string,
+  accountId: string,
+  containerId: string,
+  workspaceId: string
+): Promise<string[]> {
+  const data = await request<{ builtInVariable?: { type: string }[] }>(
+    `/accounts/${accountId}/containers/${containerId}/workspaces/${workspaceId}/built_in_variables`,
+    token
+  );
+  return (data.builtInVariable ?? []).map((v) => v.type);
+}
+
+export async function enableBuiltInVariables(
+  token: string,
+  accountId: string,
+  containerId: string,
+  workspaceId: string,
+  types: string[]
+): Promise<void> {
+  if (types.length === 0) return;
+  const query = types.map((t) => `type=${encodeURIComponent(t)}`).join('&');
+  await request(
+    `/accounts/${accountId}/containers/${containerId}/workspaces/${workspaceId}/built_in_variables?${query}`,
+    token,
+    { method: 'POST' }
+  );
+}
+
 // ─── Tags ─────────────────────────────────────────────────────────────────────
 
 export async function createTag(

@@ -79,9 +79,26 @@ const LIST_KEY: Record<EntityKind, 'tag' | 'trigger' | 'variable'> = { tag: 'tag
 export function diffVersions(before: VersionContent, after: VersionContent): DiffEntity[] {
   const entities: DiffEntity[] = [];
 
+  // A tag's firingTriggerId holds real GTM trigger IDs — meaningless outside this exact
+  // container. Packages can only carry trigger references by name (see EntityDrawer / PRD §17),
+  // so resolve them here before this delta can become a package deployed to another container.
+  const triggerIdToName = new Map<string, string>();
+  for (const t of [...(before.trigger ?? []), ...(after.trigger ?? [])]) {
+    if (t.triggerId) triggerIdToName.set(t.triggerId, t.name);
+  }
+  const withResolvedTriggerNames = (tag: GTMTag): GTMTag => {
+    if (!tag.firingTriggerId?.length) return tag;
+    return { ...tag, firingTriggerId: tag.firingTriggerId.map((id) => triggerIdToName.get(id) ?? id) };
+  };
+
   for (const kind of ['tag', 'variable', 'trigger'] as EntityKind[]) {
-    const beforeList = (before[LIST_KEY[kind]] ?? []) as unknown as Record<string, unknown>[];
-    const afterList = (after[LIST_KEY[kind]] ?? []) as (GTMTag | GTMVariable | GTMTrigger)[];
+    let beforeList = (before[LIST_KEY[kind]] ?? []) as unknown as Record<string, unknown>[];
+    let afterList = (after[LIST_KEY[kind]] ?? []) as (GTMTag | GTMVariable | GTMTrigger)[];
+    if (kind === 'tag') {
+      // Normalize both sides the same way so the before/after comparison stays apples-to-apples.
+      beforeList = (beforeList as unknown as GTMTag[]).map(withResolvedTriggerNames) as unknown as Record<string, unknown>[];
+      afterList = (afterList as GTMTag[]).map(withResolvedTriggerNames);
+    }
     const beforeMap = extractExisting(beforeList, ID_KEY[kind]);
 
     entities.push(...buildDiffEntities(kind, afterList, beforeMap));
@@ -134,6 +151,9 @@ export async function computeContainerDiff(
     ...buildDiffEntities('tag', packageEntities.tags, existingTags),
   ];
 
+  const existingTriggersByName: Record<string, string> = {};
+  for (const [name, info] of existingTriggers) existingTriggersByName[name] = info.id;
+
   return {
     containerId,
     containerName,
@@ -141,5 +161,6 @@ export async function computeContainerDiff(
     defaultWorkspaceId: wsId,
     entities,
     status: 'ready',
+    existingTriggersByName,
   };
 }

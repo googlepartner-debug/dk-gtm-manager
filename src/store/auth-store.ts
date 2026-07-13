@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { loadAuthState, saveAuthState, clearAuthState, fetchUserInfo, GTM_SCOPES } from '../lib/auth';
+import { loadAuthState, saveAuthState, clearAuthState, fetchUserInfo, isEmailAllowed, GTM_SCOPES } from '../lib/auth';
 import type { AuthState } from '../lib/auth';
 
 interface AuthStore extends AuthState {
@@ -19,6 +19,7 @@ declare global {
             scope: string;
             callback: (response: { access_token: string; expires_in: number; error?: string }) => void;
           }) => { requestAccessToken: () => void };
+          revoke: (accessToken: string, callback?: () => void) => void;
         };
       };
     };
@@ -61,6 +62,17 @@ export const useAuthStore = create<AuthStore>((set) => ({
           }
           try {
             const userInfo = await fetchUserInfo(response.access_token);
+
+            if (!isEmailAllowed(userInfo.email)) {
+              window.google.accounts.oauth2.revoke(response.access_token);
+              set({
+                isLoading: false,
+                error: `Accès restreint — outil en phase de validation interne, réservé à l'équipe Digital Keys. Compte connecté : ${userInfo.email}.`,
+              });
+              reject(new Error('email_not_allowed'));
+              return;
+            }
+
             const state: AuthState = {
               accessToken: response.access_token,
               userEmail: userInfo.email,

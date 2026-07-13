@@ -1,5 +1,89 @@
+import { useState } from 'react';
 import { useGTMStore } from '../store/gtm-store';
+import { useAuthStore } from '../store/auth-store';
 import { Badge } from '../components/ui/Badge';
+import { Button } from '../components/ui/Button';
+import { InfoTooltip } from '../components/ui/InfoTooltip';
+import type { DeploymentRecord } from '../types/gtm';
+
+function RollbackPanel({ record }: { record: DeploymentRecord }) {
+  const { accessToken } = useAuthStore();
+  const { rollback, isRollingBack, rollbackRecordId, rollbackResults } = useGTMStore();
+  const [confirming, setConfirming] = useState(false);
+
+  const eligibleCount = record.containers.filter((c) => c.status === 'success' && c.previousVersionId).length;
+  const successCount = record.containers.filter((c) => c.status === 'success').length;
+  const isThisRollingBack = isRollingBack && rollbackRecordId === record.id;
+
+  if (!record.autoPublish || successCount === 0) return null;
+
+  if (record.rolledBackAt) {
+    return (
+      <div className="mt-3 pt-3 border-t border-border">
+        <div className="flex items-center gap-2 text-xs">
+          <Badge variant="warning">Annulé le {new Date(record.rolledBackAt).toLocaleString('fr-FR')}</Badge>
+        </div>
+        {record.rollbackResults && record.rollbackResults.some((r) => r.status === 'error' || r.status === 'skipped') && (
+          <div className="mt-2 space-y-1">
+            {record.rollbackResults.filter((r) => r.status !== 'success').map((r) => (
+              <div key={r.containerId} className="text-xs text-muted-fg">
+                <span className={r.status === 'error' ? 'text-destructive' : ''}>{r.containerName}</span>
+                {r.error && <span> — {r.error}</span>}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-3 pt-3 border-t border-border">
+      {isThisRollingBack ? (
+        <div className="space-y-1.5">
+          {rollbackResults.map((r) => (
+            <div key={r.containerId} className="flex items-center justify-between text-xs">
+              <span className="text-foreground">{r.containerName}</span>
+              <span className={
+                r.status === 'success' ? 'text-success' :
+                r.status === 'error' ? 'text-destructive' :
+                r.status === 'running' ? 'text-primary' : 'text-muted-fg'
+              }>
+                {r.status === 'success' ? 'Restauré' : r.status === 'error' ? 'Échec' : r.status === 'running' ? 'En cours…' : r.status === 'skipped' ? 'Ignoré' : 'En attente'}
+              </span>
+            </div>
+          ))}
+        </div>
+      ) : confirming ? (
+        <div className="bg-destructive/5 border border-destructive/30 rounded-lg p-3">
+          <p className="text-xs text-foreground mb-2">
+            Cette action va republier immédiatement la version GTM qui était en ligne avant ce déploiement, sur {eligibleCount} container{eligibleCount > 1 ? 's' : ''}
+            {eligibleCount < successCount ? ` (${successCount - eligibleCount} sans version antérieure connue seront ignorés)` : ''}.
+            Elle prend effet sur le trafic réel immédiatement.
+          </p>
+          <div className="flex gap-2">
+            <Button
+              variant="danger"
+              size="sm"
+              disabled={!accessToken}
+              onClick={() => {
+                if (accessToken) rollback(accessToken, record);
+                setConfirming(false);
+              }}
+            >
+              Confirmer l'annulation
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setConfirming(false)}>Annuler</Button>
+          </div>
+        </div>
+      ) : (
+        <Button variant="ghost" size="sm" onClick={() => setConfirming(true)} disabled={!accessToken}>
+          Annuler le déploiement
+        </Button>
+      )}
+    </div>
+  );
+}
 
 export function HistoryPage() {
   const { history } = useGTMStore();
@@ -25,7 +109,10 @@ export function HistoryPage() {
   return (
     <div className="max-w-3xl">
       <div className="mb-6">
-        <h1 className="text-xl font-bold text-foreground">Historique des déploiements</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-xl font-bold text-foreground">Historique des déploiements</h1>
+          <InfoTooltip>Trace de tous les déploiements passés — qui, quel package, sur quels containers, avec quel résultat. Permet d'annuler (rollback) un déploiement publié automatiquement.</InfoTooltip>
+        </div>
         <p className="text-sm text-muted-fg mt-1">{history.length} déploiement{history.length > 1 ? 's' : ''} enregistré{history.length > 1 ? 's' : ''}</p>
       </div>
 
@@ -84,6 +171,7 @@ export function HistoryPage() {
                     </div>
                   ))}
                 </div>
+                <RollbackPanel record={record} />
               </div>
             </details>
           );

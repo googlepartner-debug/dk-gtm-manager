@@ -84,6 +84,28 @@ const nav = [
     label: 'Contexte',
     to: '/dashboard/contexte',
   },
+  {
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <rect x="1" y="6.5" width="4" height="8" rx="1" fill="currentColor" opacity="0.5"/>
+        <rect x="6" y="3" width="4" height="11.5" rx="1" fill="currentColor"/>
+        <rect x="11" y="1" width="4" height="13.5" rx="1" fill="currentColor" opacity="0.7"/>
+      </svg>
+    ),
+    label: 'DataLayer Mapping',
+    to: '/dashboard/datalayer-mapping',
+  },
+  {
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <rect x="1" y="1" width="4" height="14" rx="1" fill="currentColor" opacity="0.4"/>
+        <rect x="6" y="1" width="4" height="9" rx="1" fill="currentColor"/>
+        <rect x="11" y="1" width="4" height="6" rx="1" fill="currentColor" opacity="0.7"/>
+      </svg>
+    ),
+    label: 'Plan Kanban',
+    to: '/dashboard/datalayer-kanban',
+  },
 ];
 
 export function Sidebar() {

@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { clsx } from 'clsx';
 import type { MonitoringContainerData } from '../data/monitoring-mock';
 import { generateMonitoringReport } from '../lib/export-monitoring';
+import { friendlyGtmError } from '../lib/gtm-errors';
+import { InfoTooltip } from '../components/ui/InfoTooltip';
 import { useAuthStore } from '../store/auth-store';
 import { RenameDrawer, type ContainerOption } from '../components/monitoring/RenameDrawer';
 import { VariableContentDrawer } from '../components/monitoring/VariableContentDrawer';
@@ -1058,7 +1060,10 @@ export function MonitoringPage() {
       <div className="px-6 py-4 border-b shrink-0" style={{ borderColor: 'hsl(220 13% 91%)' }}>
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-base font-semibold text-foreground">Monitoring — Couverture</h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-base font-semibold text-foreground">Monitoring — Couverture</h1>
+              <InfoTooltip>Compare tags, variables et déclencheurs entre tous tes containers sélectionnés — repère les incohérences (nom différent, entité absente) et planifie des corrections en masse (renommage, synchronisation, nettoyage) publiées en un clic.</InfoTooltip>
+            </div>
             <p className="text-xs text-muted-fg mt-0.5">Visualisez la présence de chaque entité · cliquez une ligne pour renommer</p>
           </div>
           <div className="flex items-center gap-2">
@@ -1200,11 +1205,14 @@ export function MonitoringPage() {
                 Réinitialiser
               </button>
             )}
-            {monitoringError && (
-              <span className="text-xs text-destructive max-w-[200px] truncate" title={monitoringError}>
-                {monitoringError.slice(0, 60)}
-              </span>
-            )}
+            {monitoringError && (() => {
+              const friendly = friendlyGtmError(monitoringError);
+              return (
+                <span className="text-xs text-destructive max-w-[240px] truncate" title={friendly?.message}>
+                  {friendly?.message}
+                </span>
+              );
+            })()}
             {/* Scanner button or cancel during scan */}
             {isLoadingMonitoring ? (
               <button
@@ -1679,7 +1687,7 @@ function QuickCreatePanel({
     <>
       <div className="fixed inset-0 z-40" style={{ backgroundColor: 'rgba(0,10,6,0.35)' }} onClick={onClose} />
       <div className="fixed inset-0 z-50 flex items-center justify-center">
-        <div className="bg-card border border-border rounded-xl shadow-xl p-5 flex flex-col gap-3.5" style={{ width: 400 }}>
+        <div className="bg-card border border-border rounded-xl shadow-xl p-6 flex flex-col gap-4" style={{ width: 480 }}>
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-bold text-foreground">{kind === 'tags' ? 'Dupliquer ce tag' : 'Dupliquer cette variable'}</h3>
             <button type="button" onClick={onClose} className="p-1 rounded text-muted-fg hover:text-foreground">

@@ -6,6 +6,8 @@ import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
 import { Combobox } from '../components/ui/Combobox';
 import { BulkRenameModal } from '../components/containers/BulkRenameModal';
+import { friendlyGtmError } from '../lib/gtm-errors';
+import { InfoTooltip } from '../components/ui/InfoTooltip';
 
 type SortMode = 'api' | 'name' | 'published';
 
@@ -14,7 +16,7 @@ function formatPublicationDate(iso: string): string {
 }
 
 export function ContainersPage() {
-  const { accessToken } = useAuthStore();
+  const { accessToken, login, isLoading: isLoggingIn } = useAuthStore();
   const {
     accounts, selectedAccountId, selectAccount, fetchAccounts,
     containers, selectedContainerIds, toggleContainer, selectAllContainers, clearContainerSelection,
@@ -90,7 +92,10 @@ export function ContainersPage() {
     <div className="max-w-4xl">
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-xl font-bold text-foreground">Containers GTM</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-bold text-foreground">Containers GTM</h1>
+            <InfoTooltip>Choisis les containers GTM sur lesquels tu veux agir — c'est la première étape avant un déploiement, un scan Monitoring ou une action en masse. Ta sélection est réutilisée sur les autres pages.</InfoTooltip>
+          </div>
           <p className="text-sm text-muted-fg mt-1">Sélectionnez les containers cibles pour vos déploiements.</p>
         </div>
         {selectedCount > 0 && (
@@ -112,20 +117,29 @@ export function ContainersPage() {
         </label>
         {isLoadingAccounts ? (
           <div className="h-9 bg-muted animate-pulse rounded-lg" />
-        ) : accountError ? (
-          <div className="space-y-2">
-            <div className="text-sm text-destructive bg-destructive/10 border border-destructive/20 px-3 py-2 rounded-lg">
-              {accountError.includes('503') || accountError.includes('502')
-                ? "L'API GTM est temporairement indisponible (503). Réessayez dans quelques secondes."
-                : accountError}
+        ) : accountError ? (() => {
+          const friendly = friendlyGtmError(accountError);
+          const retry = () => {
+            if (selectedAccountId) selectAccount(selectedAccountId, accessToken ?? undefined);
+            else fetchAccounts(accessToken ?? undefined);
+          };
+          return (
+            <div className="space-y-2">
+              <div className="text-sm text-destructive bg-destructive/10 border border-destructive/20 px-3 py-2 rounded-lg">
+                {friendly?.message}
+              </div>
+              {friendly?.isAuthError ? (
+                <Button size="sm" variant="secondary" loading={isLoggingIn} onClick={async () => { try { await login(); retry(); } catch { /* user cancelled or Google error — already surfaced via auth-store's own error state */ } }}>
+                  Se reconnecter
+                </Button>
+              ) : (
+                <Button size="sm" variant="secondary" onClick={retry}>
+                  Réessayer
+                </Button>
+              )}
             </div>
-            {selectedAccountId && (
-              <Button size="sm" variant="secondary" onClick={() => selectAccount(selectedAccountId, accessToken ?? undefined)}>
-                Réessayer
-              </Button>
-            )}
-          </div>
-        ) : (
+          );
+        })() : (
           <Combobox
             options={accounts.map((a) => ({ value: a.accountId, label: a.name }))}
             value={selectedAccountId ?? ''}

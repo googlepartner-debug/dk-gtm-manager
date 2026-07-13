@@ -3,6 +3,7 @@ import { clsx } from 'clsx';
 import type { ContainerDiff, DiffEntity, EntityStatus, GTMTag } from '../../types/gtm';
 import { Badge } from '../ui/Badge';
 import { useGTMStore } from '../../store/gtm-store';
+import { friendlyGtmError } from '../../lib/gtm-errors';
 
 const STATUS_LABEL: Record<EntityStatus, string> = {
   new: 'Nouveau',
@@ -122,7 +123,7 @@ function EntityRow({
         <Badge variant={STATUS_BADGE[entity.status]}>{STATUS_LABEL[entity.status]}</Badge>
         {entity.status === 'modified' && (
           <button
-            className="text-xs text-muted-fg hover:text-foreground shrink-0 ml-1"
+            className="text-xs text-muted-fg hover:text-foreground hover:bg-muted shrink-0 ml-1 px-1.5 py-0.5 rounded transition-colors"
             onClick={(e) => { e.stopPropagation(); setExpanded(!expanded); }}
           >
             {expanded ? 'Masquer diff' : 'Voir diff'}
@@ -197,7 +198,7 @@ function ContainerDiffPanel({
           <span className="font-semibold">{diff.containerName}</span>
           <Badge variant="error">Erreur</Badge>
         </div>
-        <p className="text-xs text-destructive/70 mt-1">{diff.error}</p>
+        <p className="text-xs text-destructive/70 mt-1">{friendlyGtmError(diff.error)?.message}</p>
       </div>
     );
   }
@@ -373,7 +374,7 @@ function EventNameFilter({
           className="w-full h-8 pl-3 pr-7 text-xs font-mono border border-border rounded-lg bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-fg/50"
         />
         {query && (
-          <button onClick={handleClear} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-fg hover:text-foreground">
+          <button onClick={handleClear} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-muted-fg hover:text-foreground hover:bg-muted rounded-full p-1 transition-colors">
             <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
               <path d="M2 2l6 6M8 2l-6 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
             </svg>
