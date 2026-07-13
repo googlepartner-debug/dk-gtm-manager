@@ -75,7 +75,7 @@ export function EventDetailDrawer({ eventName, clientId, mode, siteId, onClose }
             </p>
             <h2 className="text-base font-semibold text-foreground font-mono">{eventName}</h2>
           </div>
-          <button onClick={onClose} className="text-muted-fg hover:text-foreground transition-colors p-1 -mr-1 mt-0.5">
+          <button onClick={onClose} aria-label="Fermer" className="text-muted-fg hover:text-foreground transition-colors p-1 -mr-1 mt-0.5">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
               <path d="M12 4L4 12M4 4l8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
             </svg>

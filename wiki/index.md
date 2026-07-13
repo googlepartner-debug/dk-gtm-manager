@@ -12,6 +12,6 @@
 | [[profiles]] | Système de profils multi-consultants, namespace localStorage, page /profile |
 | [[events-page]] | Dashboard drill-down EventsPage — score par event/trigger/variable, queue d'actions |
 | [[datalayer-mapping]] | Module DataLayer Mapping — analyse du vrai dataLayer capturé, Kanban par page, collecteur GTM |
-| [[ux-audit-chantier]] | Chantier UX/UI page par page — Containers fait, ordre pour la suite |
+| [[ux-audit-chantier]] | Chantier UX/UI page par page — terminé (6/6), méthode skill ui-ux-pro-max |
 
 _Mis à jour : 2026-07-14_

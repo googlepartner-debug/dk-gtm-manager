@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useDatalayerStore } from '../../datalayer-mapping/stores/datalayerStore';
 import { useGTMStore } from '../../../store/gtm-store';
 import { useTrackingPlanStore } from '../stores/trackingPlanStore';
@@ -325,6 +326,7 @@ function ScreenshotSection({ clientId, event }: { clientId: string; event: Track
                 onClick={() => removeScreenshot(clientId, event.id, s.id)}
                 className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/60 text-white text-xs leading-none opacity-0 group-hover:opacity-100 transition-opacity"
                 title="Supprimer"
+                aria-label="Supprimer le screenshot"
               >
                 ×
               </button>
@@ -480,6 +482,7 @@ function EventDetailPanel({
 // ─── Main page ──────────────────────────────────────────────────────────────────────
 
 export function TrackingPlanPage() {
+  const navigate = useNavigate();
   const { clients, activeClientId, setActiveClient } = useDatalayerStore();
   const { getPlan, createPlan, loadMockPlan, removeEvent, removeEvents } = useTrackingPlanStore();
 
@@ -535,7 +538,23 @@ export function TrackingPlanPage() {
   const detailEvent = detailEventId ? plan?.events.find((e) => e.id === detailEventId) ?? null : null;
 
   if (!activeClientId) {
-    return <p className="text-sm text-muted-fg py-6">Sélectionne un client.</p>;
+    return (
+      <div className="bg-card border border-dashed border-border rounded-xl p-12 text-center space-y-3 max-w-xl">
+        <p className="text-sm text-muted-fg">
+          {clients.length === 0
+            ? "Aucun client chargé pour l'instant."
+            : 'Sélectionne un client pour voir son plan de tracking.'}
+        </p>
+        <div className="flex items-center justify-center gap-2">
+          <Button variant="secondary" onClick={() => navigate('/dashboard/datalayer-mapping')}>
+            Aller choisir un client →
+          </Button>
+          {clients.length === 0 && (
+            <Button variant="secondary" onClick={() => seedTestContainer()}>Charger un container de test</Button>
+          )}
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -670,7 +689,13 @@ export function TrackingPlanPage() {
                       />
                       <p className="text-sm font-semibold text-foreground truncate">{ev.businessName}</p>
                     </div>
-                    <span className="w-2 h-2 rounded-full mt-1.5 shrink-0" style={{ backgroundColor: PRIORITY_COLOR[ev.priority] }} title={ev.priority} />
+                    <span
+                      className="w-2 h-2 rounded-full mt-1.5 shrink-0"
+                      style={{ backgroundColor: PRIORITY_COLOR[ev.priority] }}
+                      title={ev.priority}
+                      role="img"
+                      aria-label={`Priorité : ${ev.priority}`}
+                    />
                   </div>
                   <p className="text-xs text-muted-fg line-clamp-2">{ev.description || 'Pas de description.'}</p>
                   <div className="flex items-center justify-between pt-1">

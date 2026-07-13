@@ -79,7 +79,7 @@ function FocusModeEditor({
           >
             <span className="text-muted-fg text-xs shrink-0" title="Glisser pour réordonner">⠿</span>
             <span className="font-mono text-xs text-foreground flex-1 truncate">{name}</span>
-            <button onClick={() => remove(i)} className="text-xs text-destructive hover:opacity-70 px-1">×</button>
+            <button onClick={() => remove(i)} aria-label={`Retirer ${name} du funnel`} className="text-xs text-destructive hover:opacity-70 px-1">×</button>
           </div>
         ))}
         {events.length === 0 && <p className="text-xs text-muted-fg italic">Aucune étape — le connecteur restera vide.</p>}

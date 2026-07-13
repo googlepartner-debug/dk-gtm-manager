@@ -50,6 +50,16 @@ Un bug réel trouvé et corrigé : **libellé dupliqué dans l'onglet Distributi
 
 Le reste (Paramètres envoyés — matrice spec officielle GA4, Nettoyage — détection orphelins, Recommandations — règles Google Ads/GA4/Piano/Matomo) vérifié fonctionnel, pas de bug trouvé. Les 2 variables orphelines détectées (`DLV - ecommerce`, `DLV - event`) reflètent une incohérence dans les données du container de test lui-même (`test-container-mock.ts` déclare ces deux variables mais les tags référencent en fait `DLV - ecommerce.transaction_id` etc.) — comportement correct de l'outil, pas un bug, pas corrigé (tangent à l'audit UX, pas de conséquence utilisateur réelle).
 
-## DataLayer Mapping, Plan de tracking — à venir
+## DataLayer Mapping, Plan de tracking — fait (2026-07-14)
 
-Pas encore commencés. Reprendre dans cet ordre au prochain "go" de Ron sur ce chantier.
+Cinquième et sixième pages, auditées avec la méthode renforcée (skill `ui-ux-pro-max` + agent Explore dédié pour le scan aria-label) dès le départ.
+
+**Aria-label** — 4 boutons icône-seule trouvés sans `aria-label` sur `DatalayerKanbanPage.tsx` (retirer une étape du Focus Mode), `VariableDrillDown.tsx` (retour, avait déjà un `title` mais pas d'`aria-label`), `EventDetailDrawer.tsx` (fermer le tiroir — aucune mitigation du tout), `TrackingPlanPage.tsx` (supprimer un screenshot, avait déjà un `title`). Tous corrigés.
+
+**Cul-de-sac réel trouvé et corrigé sur Plan de tracking** — `TrackingPlanPage.tsx` affichait un simple texte "Sélectionne un client." sans aucune action possible quand `activeClientId` est vide, ce qui arrive systématiquement sur un profil neuf n'ayant jamais visité DataLayer Mapping avant (rien n'auto-charge de client depuis cette page). Contrairement au même message sur `DatalayerKanbanPage.tsx` (celui-là reste inoffensif : le vrai sélecteur client/site de `DataLayerMappingPage.tsx` est toujours visible juste au-dessus, et cette page a son propre effet `loadMockData()` au montage), ici c'était un vrai cul-de-sac. Remplacé par un état vide avec deux actions : "Aller choisir un client →" (renvoie vers DataLayer Mapping) et, si aucun client n'existe nulle part, "Charger un container de test" directement inline. Testé via Playwright avec un profil 100% vierge : la page était auparavant bloquée avec un simple texte, elle propose maintenant un vrai déblocage en un clic.
+
+**Priorité en couleur seule, sans alternative accessible** — les cartes d'event en Vue Business (`TrackingPlanPage.tsx`) affichaient la priorité uniquement via un point coloré avec un `title` en fallback (non fiable pour les lecteurs d'écran). Ajouté `role="img"` + `aria-label` explicite ("Priorité : critique" etc.), sans changer le rendu visuel (le point reste discret, cohérent avec la densité voulue de cette vue).
+
+## Statut : chantier terminé (6/6 pages)
+
+Containers → Packages → Déployer → Monitoring → DataLayer Mapping → Plan de tracking, toutes auditées et corrigées. Deux points laissés volontairement ouverts pour une décision produit future de Ron : le fallback statique sans connexion (Containers, §CLAUDE.md) et la cohabitation "Modifications en attente"/"Déployer un package" sur une même page (Déployer).
