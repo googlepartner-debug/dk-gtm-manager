@@ -1,0 +1,19 @@
+# Contrat Hub LAB — seed généré au retrofit.
+# Champs à "" = À COMPLÉTER par le builder via /starterpack hub (pole, stade, responsable, lien_deploie…).
+# Jamais de secret : uniquement noms, slugs, URLs publiques.
+nom_affiche: DK GTM Manager
+pole: ""
+typologie: Interne, Fonctionnel
+categorie: ""
+stade: ""
+responsable: ""
+client: Interne
+marque: DigitalKeys
+lien_deploie: ""
+lien_demo: ""
+lien_doc: ""
+preview_image: ""
+spend_slug: dk-gtm-manager
+initiative_ice: ""
+actif: true
+version: 0.1.0
