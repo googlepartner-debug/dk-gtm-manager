@@ -2,14 +2,14 @@
 # Champs à "" = À COMPLÉTER par le builder via /starterpack hub (pole, stade, responsable, lien_deploie…).
 # Jamais de secret : uniquement noms, slugs, URLs publiques.
 nom_affiche: DK GTM Manager
-pole: ""
+pole: Data
 typologie: Interne, Fonctionnel
 categorie: ""
-stade: ""
-responsable: ""
+stade: Expérimentation
+responsable: Ron
 client: Interne
 marque: DigitalKeys
-lien_deploie: ""
+lien_deploie: https://dk-gtm-manager.dev
 lien_demo: ""
 lien_doc: ""
 preview_image: ""
