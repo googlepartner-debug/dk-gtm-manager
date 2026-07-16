@@ -792,3 +792,5 @@ Ron a demandé le "système complet" plutôt qu'un simple portage de couleurs, e
 Vérifié : `tsc --noEmit` + `oxlint` propres, Playwright confirme radius/poids/padding du bouton landing et le rendu JetBrains Mono après correction du token.
 
 **Ré-audit échantillon `ux-foundations`** (Containers/Packages/Monitoring) : un agent a trouvé 3 pistes (groupement d'actions, hiérarchie CTA, surcharge Miller's Law) — **aucune ne survit à la vérification manuelle du code** (groupements et hiérarchies déjà corrects, une des 3 citait un fichier qui ne contenait même pas les constantes évoquées). Conclusion : `ux-foundations` ne justifie pas de reprendre l'audit déjà fait, il s'applique en avant à partir de maintenant.
+
+**Ajustement de Ron sur la nav** : Packages déplacé du groupe "Publication" (qui ne contenait que lui) vers "Config GTM" — 2 groupes au lieu de 3. Le CTA "Publier" reste dans le header de toute façon, un groupe sidebar entier pour une seule page était superflu.

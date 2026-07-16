@@ -98,12 +98,11 @@ Ron doit aussi fournir des références de livres UX/UI à lire (pas encore reç
 
 Ron a fourni les références de livres UX/UI (`~/.claude/skills/ux-foundations`, 9 livres, déjà intégré comme troisième source dans `wiki/ux-ui-reference.md`). Carte à 4 niveaux figée, traduite en nav groupée à partir des principes de `krug-usability.md` §Navigation (répondre à "quel site/où je suis/que puis-je faire" en un coup d'œil, rester dans 5-7 catégories max, faire correspondre les noms au modèle mental de l'utilisateur).
 
-**Découpage retenu** — 3 groupes (le 4e niveau "Documenter/planifier" fusionné avec "Diagnostiquer" côté DataLayer Mapping/Plan de tracking puisque les deux partagent déjà le même sélecteur client/site depuis la fusion du 2026-07-14 ; Containers rattaché au groupe Config GTM comme prérequis d'entrée plutôt que niveau à part) :
-- **Config GTM** — Containers, Monitoring, Événements, Historique, Contexte (référentiel GTM déclaré, diagnostic + correction)
+**Découpage retenu** — 2 groupes après ajustement de Ron (Packages rattaché à Config GTM plutôt qu'un 3e groupe "Publication" dédié — le CTA "Publier" reste de toute façon dans le header, donc un groupe entier pour une seule page était superflu) :
+- **Config GTM** — Containers, Monitoring, Événements, Historique, Contexte, Packages (référentiel GTM déclaré : diagnostic, correction, construction)
 - **Réalité & Plan** — DataLayer Mapping, Plan de tracking (donnée réellement captée + cadrage métier)
-- **Publication** — Packages (le CTA "Publier" reste dans le header, déjà tranché le 2026-07-14)
 
-Libellés choisis par Ron parmi 3 propositions (Piloter/Aligner/Déployer, Diagnostiquer/Cadrer/Agir, ou libellés fonctionnels) : **Config GTM / Réalité & Plan / Publication**.
+Libellés choisis par Ron parmi 3 propositions (Piloter/Aligner/Déployer, Diagnostiquer/Cadrer/Agir, ou libellés fonctionnels) : **Config GTM / Réalité & Plan**.
 
 **Implémenté** dans `Sidebar.tsx` : `nav` (tableau plat) → `navGroups` (tableau de groupes avec `label` + `items`), rendu avec un header de section (`text-[11px] uppercase tracking-wide text-muted-fg/70`) au-dessus de chaque groupe. Routes inchangées, aucune régression de lien.
 

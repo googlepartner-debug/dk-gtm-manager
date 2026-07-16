@@ -66,6 +66,17 @@ const navGroups = [
         label: 'Contexte',
         to: '/dashboard/contexte',
       },
+      {
+        icon: (
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <rect x="1" y="2" width="14" height="3" rx="1" fill="currentColor"/>
+            <rect x="1" y="7" width="10" height="2.5" rx="1" fill="currentColor" opacity="0.6"/>
+            <rect x="1" y="11.5" width="12" height="2.5" rx="1" fill="currentColor" opacity="0.4"/>
+          </svg>
+        ),
+        label: 'Packages',
+        to: '/dashboard/packages',
+      },
     ],
   },
   {
@@ -91,22 +102,6 @@ const navGroups = [
         ),
         label: 'Plan de tracking',
         to: '/dashboard/tracking-plan',
-      },
-    ],
-  },
-  {
-    label: 'Publication',
-    items: [
-      {
-        icon: (
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-            <rect x="1" y="2" width="14" height="3" rx="1" fill="currentColor"/>
-            <rect x="1" y="7" width="10" height="2.5" rx="1" fill="currentColor" opacity="0.6"/>
-            <rect x="1" y="11.5" width="12" height="2.5" rx="1" fill="currentColor" opacity="0.4"/>
-          </svg>
-        ),
-        label: 'Packages',
-        to: '/dashboard/packages',
       },
     ],
   },
