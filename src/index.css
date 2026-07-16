@@ -1,13 +1,15 @@
-@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@200;300;400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@200;300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700;800&display=swap');
 @import "tailwindcss";
 
 /* ─── DK Design Tokens ──────────────────────────────────────────────────────── */
 
 @theme {
   --font-family-sans: 'Manrope', system-ui, sans-serif;
+  --font-sans: 'Manrope', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
 
   --color-primary:        hsl(267 100% 59%);
-  --color-primary-hover:  hsl(283 100% 11%);
+  --color-primary-hover:  hsl(274 100% 46%);
   --color-accent:         hsl(46 100% 50%);
   --color-mauve:          hsl(273 100% 88%);
   --color-prune:          hsl(283 100% 11%);
@@ -19,9 +21,18 @@
   --color-muted-fg:       hsl(215 16% 47%);
   --color-border:         hsl(214 32% 91%);
 
-  --color-success:        hsl(142 76% 36%);
-  --color-warning:        hsl(38 93% 53%);
-  --color-destructive:    hsl(0 84% 60%);
+  /* Direction v3 (2026-07-15) : succès/alerte/critique volontairement séparés du violet/prune/jaune de marque */
+  --color-success:        hsl(152 62% 30%);
+  --color-warning:        hsl(38 93% 40%);
+  --color-destructive:    hsl(357 78% 48%);
+
+  /* Échelle typo v3 : chiffres qui comptent, énormes */
+  --text-hero: 6.5rem;
+  --text-hero--font-weight: 800;
+  --text-hero--line-height: 1.02;
+  --text-h2: 2.75rem;
+  --text-h2--font-weight: 800;
+  --text-h2--line-height: 1.1;
 
   --color-sidebar-bg:     hsl(220 20% 97%);
   --color-sidebar-border: hsl(220 13% 91%);
@@ -59,15 +70,15 @@
   --z-modal:   50;
   --z-toast:   60;
 
-  /* Score/status tokens (utilisés dans EventsPage, DistributionTab) */
+  /* Score/status tokens (utilisés dans EventsPage, DistributionTab) — alignés sur critique/alerte/succès v3 */
   --color-score-0:    hsl(220 13% 78%);
   --color-score-0-bg: hsl(220 20% 97%);
-  --color-score-1:    hsl(0 84% 60%);
-  --color-score-1-bg: hsl(0 84% 97%);
-  --color-score-2:    hsl(27 96% 55%);
-  --color-score-2-bg: hsl(27 96% 97%);
-  --color-score-3:    hsl(142 60% 40%);
-  --color-score-3-bg: hsl(142 60% 96%);
+  --color-score-1:    hsl(357 78% 48%);
+  --color-score-1-bg: hsl(357 78% 97%);
+  --color-score-2:    hsl(38 93% 40%);
+  --color-score-2-bg: hsl(38 93% 96%);
+  --color-score-3:    hsl(152 62% 30%);
+  --color-score-3-bg: hsl(152 62% 96%);
 
   /* Spin animation helper */
   --duration-spin: 0.75s;
@@ -131,6 +142,34 @@ body {
 
 .dk-spin {
   animation: dk-spin var(--duration-spin, 0.75s) linear infinite;
+}
+
+/* Statut en direct (v3) : pulse sur le point de statut, pas sur le texte */
+@keyframes dk-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.55; transform: scale(0.85); }
+}
+
+.dk-pulse {
+  animation: dk-pulse 1.8s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dk-pulse { animation: none !important; opacity: 1; transform: none; }
+}
+
+/* Lift au survol (v3) : boutons primaires */
+.dk-lift {
+  transition: transform 130ms ease-out, box-shadow 130ms ease-out, background-color 130ms ease-out;
+}
+
+.dk-lift:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px -2px rgb(144 49 255 / 0.25);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dk-lift:hover:not(:disabled) { transform: none; }
 }
 
 /* ─── Shimmer skeleton ───────────────────────────────────────────────────────── */

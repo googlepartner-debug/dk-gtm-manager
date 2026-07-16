@@ -723,3 +723,72 @@ Dernières pages du chantier, auditées avec la méthode renforcée (skill + age
 **Priorité en couleur seule sans alternative accessible.** Les cartes d'event en Vue Business de `TrackingPlanPage.tsx` indiquaient la priorité uniquement via un point coloré avec un `title` en fallback (pas fiable pour les lecteurs d'écran — règle "Color Only" de la checklist, sévérité High). Ajouté `role="img"` + `aria-label` explicite, sans changer le rendu visuel.
 
 **Chantier UX/UI terminé — 6/6 pages** (Containers → Packages → Déployer → Monitoring → DataLayer Mapping → Plan de tracking). Deux points laissés ouverts pour une décision produit future de Ron : le fallback statique sans connexion (Containers) et la cohabitation de deux CTA "Publier"/"Déployer" sur la même page (Déployer) — documentés dans `wiki/ux-audit-chantier.md`.
+
+---
+
+## 2026-07-15 — Repasse UX/UI sur tout l'outil (pages jamais auditées + composants partagés)
+
+Ron a demandé de repasser sur l'ensemble de l'outil, cette fois en couvrant les pages restées hors du chantier initial : `Landing.tsx`, `Dashboard.tsx` (layout shell), `ContextePage.tsx`, `HistoryPage.tsx`, `ProfilePage.tsx`, `EventsPage.tsx`, plus une repasse de `Header.tsx`/`Sidebar.tsx` et un scan de régression exhaustif icon-only sur tout `src/`. Méthode : `wiki/ux-ui-reference.md` (fusion des skills `ux-ui-design` + `ui-ux-pro-max`, établie la veille), 8 agents en parallèle (1 par page/zone + 1 scan global), synthèse présentée à Ron qui a choisi de tout traiter.
+
+**~35 points corrigés**, dont :
+- **18 boutons icon-only sans `aria-label`** trouvés sur des fichiers jamais scannés jusqu'ici (`ParamMatrixTab.tsx`, `TagDrawer.tsx` ×2, `RenameDrawer.tsx`, `VariableContentDrawer.tsx`, `MonitoringPage.tsx` ×4, `EventsPage.tsx` ×4, `EventChainDrawer.tsx`, `VersionDiffFlow.tsx`, `ProfilePage.tsx`, `Header.tsx`) — le même bug que celui déjà corrigé 13 fois lors du premier chantier, donc toujours le point faible systémique n°1 du projet.
+- **3 statuts encodés uniquement par couleur** rendus accessibles : signaux détectés de `ContextePage.tsx` (Consent Mode/GA4/Enhanced Conversions — au passage, transformé en composant factorisé avec un libellé d'état explicite "Activé"/"Non détecté", pas juste un `aria-label` caché), statut container dans le détail déployé de `HistoryPage.tsx`, `ScoreDots` de `EventsPage.tsx`.
+- **Couleurs hors tokens CSS** remplacées par les variables de `index.css` : `InfoTooltip.tsx` (gris-bleu arbitraire → `var(--color-prune)`), rouge destructive de `ProfilePage.tsx` et `TagDrawer.tsx` (hex en dur → `var(--color-destructive)`), couleurs succès/warning de `ContextePage.tsx`.
+- **Vraie incohérence UX trouvée sur `ContextePage.tsx`** : le bouton "Tous les containers" apparaissait déjà visuellement actif (`variant='primary'`) quand `selectedContainer === null`, alors que le contenu affichait encore "Sélectionnez un container pour afficher l'analyse". Corrigé en initialisant l'état à `'all'` au lieu de `null`.
+- **État de rollback en cours rendu explicite** sur `HistoryPage.tsx` : ajout d'un libellé "Annulation du déploiement en cours…" avec spinner (réutilise l'animation `dk-spin` déjà définie), avant la liste des containers qui changeait de statut sans annonce.
+- Petits points : typo "Echec total" → "Échec total", titre H1 harmonisé entre état vide et rempli sur `HistoryPage.tsx`, `aria-busy` sur les 3 boutons de connexion de `Landing.tsx`, `focus-visible` explicite sur les items de `Sidebar.tsx`, contraste du badge du bouton "Publier" dans `Header.tsx` remonté (`bg-white/20` → `bg-white/30`).
+
+**Faux positif écarté** : l'audit de `Landing.tsx` signalait le logo du footer comme dépourvu d'`aria-label` — en réalité `DKGTMLogo.tsx` pose l'`aria-label="Digitalkeys GTM Manager"` sur le wrapper du composant indépendamment de la prop `showProduct`, donc le footer l'a bien aussi. Pas de correctif nécessaire.
+
+**Point laissé volontairement en l'état** : la triplication du CTA "Se connecter"/"Se connecter avec Google" sur `Landing.tsx` (header, hero, CTA final) avait été signalée en haute sévérité par un des agents d'audit — mais c'est un pattern standard de landing page à action unique (rappel du CTA à chaque section de scroll), pas un anti-pattern. Non traité.
+
+Vérifié : `tsc --noEmit` et `oxlint` propres après tous les correctifs (aucune nouvelle erreur/warning). Testé visuellement via Playwright sur `Landing.tsx` uniquement (aucune erreur console) — les pages `/dashboard/*` nécessitent une vraie connexion Google OAuth, non testables en headless sans compte réel ; à vérifier manuellement par Ron à l'usage.
+
+---
+
+## 2026-07-16 — Direction visuelle v3 + réflexion structure/navigation (en cours)
+
+Ron a trouvé le chantier du 2026-07-15 "hyper léger" — il veut une vraie UX/UI ambitieuse ("de malade"), pas juste des correctifs d'accessibilité. Deux volets ouverts, détaillés dans `wiki/ux-structure-reflexion.md` :
+
+**Direction visuelle** : deux artefacts produits (v2 jugée "trop sage", v3 retenue — hero plein écran animé, maquette d'app en contexte, motion réel). Couleurs de v3 vérifiées en direct sur digitalkeys.fr via Playwright/`getComputedStyle` (pas devinées) : violet `#9031ff`, violet CTA `#8300e9`, prune `#2c0039` (réservé à une seule bande sombre, pas à la card hero comme en v3 initiale — corrigé), jaune `#ffc928`, orange d'alerte `#ffa600` (remplace un brun mal choisi), lilas `#e3c0ff`. **Pas encore portée dans le vrai code** — mise en attente le temps de finir la réflexion structure.
+
+**Structure/navigation** : constat que 6 des 8 pages de la sidebar tournent sur le même référentiel (config GTM déclarée) sous des angles différents, ce qui peut créer une confusion "quelle page pour quelle question". Carte à 4 niveaux d'usage dégagée avec Ron et testée sur les 12 pages/onglets : Diagnostiquer+corriger au fil de l'eau (Tags, Événements, DataLayer Mapping partiellement) / Diagnostiquer vue d'ensemble (Paramètres envoyés, Distribution, Recommandations, Contexte, Historique) / Agir en masse (Déclencheurs/Variables, Nettoyage, Packages/Déployer) / Documenter-planifier (Plan de tracking). Carte validée sur les 12 mais pas encore figée définitivement.
+
+**Découverte vérifiée dans le code** : Ron envisage que DataLayer Mapping serve à créer des entrées de Plan de tracking (réalité captée → plan, complémentaire au sens existant plan → réalité déjà en place via `getEventCoverage()`). Vérification faite : **ça n'existe pas du tout aujourd'hui** — aucun import croisé entre `datalayerStore.ts` et `trackingPlanStore.ts`, `TrackingPlanPage.tsx` ne fait que lire DataLayer Mapping, aucune fonction de conversion, aucun bouton. Pas un problème de nav — une fonctionnalité entière à construire, notée comme candidat fort pour la suite.
+
+Piste notée en plus sur l'onglet Distribution de Monitoring (déjà interactif, effet "wow" confirmé) : export/partage comme livrable client, jugé la piste la plus intéressante commercialement par Ron.
+
+**Prochaine session** : trancher si la carte à 4 niveaux est définitive, esquisser une nouvelle structure de nav (probablement groupée par catégorie plutôt que liste plate), puis seulement après reprendre le portage de la direction visuelle v3 dans le vrai code. Ron doit aussi fournir des références de livres UX/UI.
+
+---
+
+## 2026-07-16 (suite) — Skill ux-foundations intégré, sidebar regroupée par catégorie
+
+Reprise du chantier structure/nav laissé ouvert. Ron a fourni le skill `ux-foundations` (`~/.claude/skills/ux-foundations`, 9 livres UX/UI distillés : Krug, Norman, Cooper, Refactoring UI, Yablonski, Greever, Everyday UX, Atomic Design, Weinschenk) — intégré comme troisième source dans `wiki/ux-ui-reference.md` (après charte DK et `ui-ux-pro-max`, avant `ux-ui-design`), avec la table de routing par tâche du skill référencée plutôt que dupliquée.
+
+**Carte à 4 niveaux figée**, traduite en regroupement de sidebar à partir des principes de navigation de Krug (répondre à "quel site/où je suis/que puis-je faire" en un coup d'œil, rester dans 5-7 catégories max, faire correspondre les noms au modèle mental de l'utilisateur). 3 groupes retenus (Containers rattaché au groupe Config GTM comme prérequis d'entrée, pas comme niveau à part ; le niveau "Documenter/planifier" fusionné avec DataLayer Mapping puisque les deux pages partagent déjà le même sélecteur client/site depuis le 2026-07-14) :
+- **Config GTM** — Containers, Monitoring, Événements, Historique, Contexte
+- **Réalité & Plan** — DataLayer Mapping, Plan de tracking
+- **Publication** — Packages
+
+Libellés choisis par Ron parmi 3 propositions soumises. Détail complet de la démarche dans `wiki/ux-structure-reflexion.md`.
+
+**Implémenté** dans `Sidebar.tsx` : `nav` (tableau plat de 8 items) → `navGroups` (3 groupes avec header de section `text-[11px] uppercase tracking-wide`). Routes inchangées. Testé : `tsc --noEmit` + `oxlint` propres, vérification visuelle Playwright via exposition temporaire de `useAuthStore`/`useProfileStore` sur `window` dans `main.tsx` (retirée après vérification — pas de vrai token OAuth disponible en headless) — snapshot confirme les 3 groupes avec les bons libellés et aucun lien cassé.
+
+**Prochaine étape** : reprendre le portage de la direction visuelle v3 dans le vrai code (tokens couleur déjà vérifiés en direct sur digitalkeys.fr le 2026-07-16, jamais portés dans `index.css`).
+
+---
+
+## 2026-07-16 (suite 2) — Portage complet v3, ré-audit échantillon ux-foundations
+
+Ron a demandé le "système complet" plutôt qu'un simple portage de couleurs, et un ré-audit d'échantillon avec `ux-foundations`. Détail complet dans `wiki/ux-structure-reflexion.md`.
+
+**Lecture directe de l'artefact v3** (le fetch texte précédent ne renvoyait que les polices encodées en base64) : fichier HTML sauvegardé par le fetch précédent, servi en local via un serveur HTTP temporaire (Playwright bloque `file://`, et n'est pas authentifié sur claude.ai), `getComputedStyle` sur le vrai DOM. Révèle un vrai système : 6 couleurs marque/état séparées ("zéro dilution"), typo hero 104px/Manrope 800 + JetBrains Mono pour tout identifiant/version/timestamp, boutons 13-22px/radius 11px/poids 800/lift au survol, motion pulse 1.8s sur statuts live.
+
+**Porté dans `index.css`** : `--color-success/warning/destructive` + `--color-score-0..3` remplacés par les valeurs exactes v3 (cascade automatique à `Badge.tsx`, zéro changement de composant). `--font-mono: 'JetBrains Mono'` ajouté — **piège Tailwind v4** trouvé et corrigé : le token correct est `--font-mono`, pas `--font-family-mono` (silencieusement sans effet, détecté via vérification Playwright). Une fois corrigé, les 24 usages `font-mono` déjà présents dans le code basculent automatiquement en JetBrains Mono. `--text-hero`/`--text-h2` ajoutés mais pas encore utilisables (Tailwind v4 JIT — la classe n'existe qu'une fois utilisée dans un vrai fichier source ; aucun composant KPI hero n'existe encore dans l'app). `.dk-pulse` et `.dk-lift` ajoutés (classes manuelles, `prefers-reduced-motion` respecté).
+
+**`Button.tsx`** : poids `font-extrabold` partout, radius par taille, variantes `primary`/`danger` avec `.dk-lift`. `ContainersPage.tsx` : badge `publicId` passé en `font-mono`.
+
+Vérifié : `tsc --noEmit` + `oxlint` propres, Playwright confirme radius/poids/padding du bouton landing et le rendu JetBrains Mono après correction du token.
+
+**Ré-audit échantillon `ux-foundations`** (Containers/Packages/Monitoring) : un agent a trouvé 3 pistes (groupement d'actions, hiérarchie CTA, surcharge Miller's Law) — **aucune ne survit à la vérification manuelle du code** (groupements et hiérarchies déjà corrects, une des 3 citait un fichier qui ne contenait même pas les constantes évoquées). Conclusion : `ux-foundations` ne justifie pas de reprendre l'audit déjà fait, il s'applique en avant à partir de maintenant.

@@ -316,7 +316,7 @@ export function ContainersPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-medium text-foreground truncate">{c.name}</span>
-                        <Badge variant="default">{c.publicId}</Badge>
+                        <Badge variant="default" className="font-mono">{c.publicId}</Badge>
                         {c.usageContext?.includes('server') && (
                           <Badge variant="info">server-side</Badge>
                         )}

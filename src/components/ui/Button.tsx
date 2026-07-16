@@ -8,17 +8,17 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const variants = {
-  primary:   'bg-primary text-white hover:bg-primary-hover active:bg-primary-hover disabled:opacity-50',
+  primary:   'bg-primary text-white hover:bg-primary-hover active:bg-primary-hover disabled:opacity-50 dk-lift',
   secondary: 'bg-white text-foreground border border-border hover:bg-muted active:bg-muted disabled:opacity-50',
   ghost:     'text-muted-fg hover:bg-muted hover:text-foreground active:bg-muted disabled:opacity-50',
-  danger:    'bg-destructive text-white hover:bg-destructive/90 active:bg-destructive/80 disabled:opacity-50',
+  danger:    'bg-destructive text-white hover:bg-destructive/90 active:bg-destructive/80 disabled:opacity-50 dk-lift',
   google:    'bg-card text-foreground border border-border hover:bg-muted shadow-card',
 };
 
 const sizes = {
-  sm: 'h-7 px-3 text-xs gap-1.5',
-  md: 'h-9 px-4 text-sm gap-2',
-  lg: 'h-11 px-6 text-sm gap-2.5',
+  sm: 'h-7 px-3 text-xs gap-1.5 rounded-md',
+  md: 'h-9 px-4 text-sm gap-2 rounded-lg',
+  lg: 'h-11 px-[22px] text-sm gap-2.5 rounded-[11px]',
 };
 
 export function Button({
@@ -33,7 +33,7 @@ export function Button({
   return (
     <button
       className={clsx(
-        'inline-flex items-center justify-center rounded-lg font-semibold transition-colors dk-press',
+        'inline-flex items-center justify-center font-extrabold transition-colors dk-press',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2',
         'cursor-pointer select-none',
         variants[variant],
