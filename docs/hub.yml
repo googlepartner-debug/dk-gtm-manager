@@ -9,7 +9,7 @@ stade: Expérimentation
 responsable: Ron
 client: Interne
 marque: DigitalKeys
-lien_deploie: https://dk-gtm-manager.dev
+lien_deploie:
 lien_demo: ""
 lien_doc: ""
 preview_image: ""
